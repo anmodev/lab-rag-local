@@ -23,6 +23,8 @@ const clean = (s) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 3)}...` : s);
+// Segundos desde 1 s; por debajo, milisegundos
+const fmt = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
 
 // Llama a /ask y mide la latencia completa vista por el cliente (incluye la espera en cola).
 // Nunca lanza: si algo falla devuelve { error } para no tumbar a las demas preguntas.
@@ -96,7 +98,14 @@ const results = await runPool(questions, concurrency, (item) => ask(item.q));
 const wallMs = Math.round(performance.now() - wallStart);
 
 const rows = questions.map((item, i) => toRow(item, results[i]));
-console.table(rows);
+// rows conserva los ms como numero para los calculos; solo la tabla usa texto
+console.table(
+  rows.map(({ ms, modelo_ms, ...rest }) => ({
+    ...rest,
+    tiempo: fmt(ms),
+    modelo: fmt(modelo_ms),
+  })),
+);
 
 const ok = rows.filter((r) => r.ok === "OK").length;
 const errors = rows.filter((r) => r.ok === "ERROR").length;
@@ -108,8 +117,8 @@ console.log(
   `Concurrencia: ${concurrency} | Aciertos: ${ok}/${rows.length} | Errores: ${errors}`,
 );
 console.log(
-  `Tiempo total: ${wallMs} ms | Suma del trabajo del modelo: ${modelSum} ms`,
+  `Tiempo total: ${fmt(wallMs)} | Suma del trabajo del modelo: ${fmt(modelSum)}`,
 );
 console.log(
-  `Latencia por pregunta -> promedio: ${avg} ms | maxima: ${Math.max(...times)} ms`,
+  `Latencia por pregunta -> promedio: ${fmt(avg)} | maxima: ${fmt(Math.max(...times))}`,
 );

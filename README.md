@@ -115,8 +115,8 @@ la similitud, y al final compara aciertos contra preguntas sin respuesta para ca
 node eval/run.js
 ```
 
-El pipeline completo con el modelo (tarda unos 3 a 4 minutos). Imprime la respuesta, si es correcta,
-cuantos chunks y tokens uso y los tiempos. El numero es cuantas preguntas se mandan en simultaneo:
+El pipeline completo con el modelo (tarda unos 5 minutos con las 45 preguntas). Imprime la respuesta, si es correcta,
+cuantos chunks y tokens uso y los tiempos (en segundos desde 1 s, en ms por debajo). El numero es cuantas preguntas se mandan en simultaneo:
 
 ```
 node eval/ask.js 1
@@ -124,6 +124,15 @@ node eval/ask.js 4
 ```
 
 Para ver la respuesta completa en la tabla, antes de correrlo: `set ANSWER_WIDTH=300`.
+
+Para revisar una sola pregunta con la respuesta completa y los chunks que leyo el modelo (`sources`):
+
+```
+curl.exe -X POST http://localhost:3000/ask -H "Content-Type: application/json" -d "{\"question\":\"quien aprueba una compra de 12 millones de pesos\"}"
+```
+
+`questions.json` tiene 45 preguntas: las 20 originales y 25 nuevas, marcadas con `"nueva": true` y un
+`tipo` (`parafrasis`, `ortografia`, `combinar`, `rangos`, `trampa`). Los scripts ignoran esos dos campos.
 
 ## Como se dividen los documentos
 
@@ -167,18 +176,41 @@ api/
 
 ## Resultados de referencia
 
-Con 20 preguntas (14 con respuesta y 6 sin ella), `llama3.2:3b` y el chunker por secciones:
+Con `llama3.2:3b` y el chunker por secciones.
+
+Las 20 preguntas originales (14 con respuesta y 6 sin ella):
 
 | Prueba | Resultado |
 |---|---|
 | `run.js` | 14/14 en el top-5, 13 en el puesto 1 |
 | `ask.js 4` | 19/20, unos 140 s en total |
 
+Las 45 preguntas (20 originales + 25 nuevas, 34 con respuesta y 11 sin ella):
+
+| Prueba | Resultado |
+|---|---|
+| `run.js` | 34/34 en el top-5, 30 en el puesto 1 |
+| `ask.js 4` | 42/45, unos 326 s en total |
+
+Las 25 nuevas por tipo en `ask.js 4`:
+
+| Tipo | Aciertos | Fallo |
+|---|---|---|
+| Parafraseadas | 5/5 | |
+| Con errores de ortografia | 4/5 | comer en Cali |
+| Combinar o calcular | 3/5 | aprobador de 12 millones, vacaciones por 3 anos |
+| Rangos numericos | 5/5 | |
+| Trampas cercanas al tema | 5/5 | |
+
 Lo aprendido hasta ahora:
 - `MIN_SIMILARITY=0.45` separa las preguntas lejanas del tema (hasta ~0.40) de los aciertos (desde ~0.49).
   Las preguntas cercanas al tema pero sin respuesta (~0.55 a 0.58) se mezclan con los aciertos: las resuelve el modelo.
 - Los modelos de 3B confunden rangos y temas parecidos. Cambiar de modelo o retocar el prompt no mejoro: conviene medir antes de cambiar.
 - Ollama atiende de a poco: unas 5 a 6 preguntas por minuto en este equipo, sin importar cuantas lleguen juntas.
+- Al modelo le llegan todos los chunks que pasan el umbral (hasta `k`, 3 por defecto), no solo el mejor. No sabe cual es el mejor: un chunk de relleno puede distraerlo.
+- Las preguntas cercanas al tema sin dato (trampas) llegan a ~0.67 de similitud, por encima de casi todos los aciertos. Ningun umbral las separa; en esta corrida el modelo dijo que no sabia en las 5.
+- Los 3 fallos nuevos fueron de lectura del modelo, no de busqueda, y dos de ellos aciertan al cambiar la redaccion de la pregunta. El modelo de 3B es sensible a como se pregunta.
+- Un modelo de chat mayor deberia mejorar la lectura, no la busqueda ni el umbral. Para compararlo: cambiar solo `CHAT_MODEL` y medir contra estos resultados (ver "Para el piloto" en `CLAUDE.md`).
 
 ## Ver la base de datos desde consola
 
@@ -246,6 +278,7 @@ docker compose down -v
 ## Pendientes
 
 - Indice HNSW y comparar con `EXPLAIN` contra el escaneo exacto.
-- Set de evaluacion mas dificil (preguntas parafraseadas, con errores de ortografia, que combinen secciones).
+- Medir consistencia en el set de evaluacion: varias redacciones de cada pregunta y contar las que se responden bien siempre.
+- Calificador de `ask.js` que acepte una lista de textos esperados (preguntas de dos partes).
 - Respuestas en streaming y limite de concurrencia en la API.
 - Mas tipos de archivo (PDF, Word, PowerPoint) para el piloto.

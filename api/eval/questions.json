@@ -2,89 +2,274 @@
     {
         "q": "cual es el tope de hospedaje por noche en bogota",
         "expect": "280.000",
-        "answerHas": "280.000"
+        "answerHas": "280.000",
+        "tipo": "base"
     },
     {
         "q": "que formulario uso para registrar un proveedor nuevo",
         "expect": "PV-01",
-        "answerHas": "PV-01"
+        "answerHas": "PV-01",
+        "tipo": "base"
     },
     {
         "q": "cuantos caracteres minimo debe tener la contrasena",
         "expect": "12 caracteres",
-        "answerHas": "12 caracteres"
+        "answerHas": "12 caracteres",
+        "tipo": "base"
     },
     {
         "q": "cuanto es el bono por nacimiento de un hijo",
         "expect": "400.000",
-        "answerHas": "400.000"
+        "answerHas": "400.000",
+        "tipo": "base"
     },
     {
         "q": "cuantas horas de capacitacion al ano debo completar",
         "expect": "24 horas de capac",
-        "answerHas": "24 horas"
+        "answerHas": "24 horas",
+        "tipo": "base"
     },
     {
         "q": "de cuanto es el auxilio de conectividad del teletrabajo",
         "expect": "60.000",
-        "answerHas": "60.000"
+        "answerHas": "60.000",
+        "tipo": "base"
     },
     {
         "q": "que formulario lleno para pedir vacaciones",
         "expect": "TH-07",
-        "answerHas": "TH-07"
+        "answerHas": "TH-07",
+        "tipo": "base"
     },
     {
         "q": "hasta cuanto cubre el auxilio educativo",
         "expect": "3.000.000",
-        "answerHas": "3.000.000"
+        "answerHas": "3.000.000",
+        "tipo": "base"
     },
     {
         "q": "quien aprueba una compra de 7 millones de pesos",
         "expect": "1.000.001",
-        "answerHas": "gerente de area"
+        "answerHas": "gerente de area",
+        "tipo": "base"
     },
     {
         "q": "cuanto tarda en resolverse un incidente critico",
         "expect": "se resuelven en 4 horas",
-        "answerHas": "4 horas"
+        "answerHas": "4 horas",
+        "tipo": "base"
     },
     {
         "q": "en cuantos dias debo legalizar los gastos de un viaje",
         "expect": "LG-11",
-        "answerHas": "5 dias"
+        "answerHas": "5 dias",
+        "tipo": "base"
     },
     {
         "q": "cada cuanto debo cambiar mi contrasena",
         "expect": "Se cambian cada",
-        "answerHas": "90 dias"
+        "answerHas": "90 dias",
+        "tipo": "base"
     },
     {
         "q": "cuanto tiempo tengo para avisar a TI si pierdo el portatil",
         "expect": "bloquearlo de forma remota",
-        "answerHas": "2 horas"
+        "answerHas": "2 horas",
+        "tipo": "base"
     },
     {
         "q": "con cuantos dias de anticipacion debo solicitar las vacaciones",
         "expect": "mediante el formulario TH-07",
-        "answerHas": "20 dias"
+        "answerHas": "20 dias",
+        "tipo": "base"
     },
     {
-        "q": "cuantos dias de licencia de maternidad da la empresa"
+        "q": "cuantos dias de licencia de maternidad da la empresa",
+        "tipo": "base-sin-respuesta"
     },
     {
-        "q": "cuanto pagan por una hora extra nocturna"
+        "q": "cuanto pagan por una hora extra nocturna",
+        "tipo": "base-sin-respuesta"
     },
     {
-        "q": "como solicito un prestamo a la empresa"
+        "q": "como solicito un prestamo a la empresa",
+        "tipo": "base-sin-respuesta"
     },
     {
-        "q": "cual es el salario del gerente general"
+        "q": "cual es el salario del gerente general",
+        "tipo": "base-sin-respuesta"
     },
     {
-        "q": "cual es la capital de Francia"
+        "q": "cual es la capital de Francia",
+        "tipo": "base-sin-respuesta"
     },
     {
-        "q": "dame una receta de arroz con pollo"
+        "q": "dame una receta de arroz con pollo",
+        "tipo": "base-sin-respuesta"
+    },
+    {
+        "q": "¿Cuánto es lo máximo que me pagan por pernoctar si el viaje es a Medellín?",
+        "expect": "220.000 en otras ciudades",
+        "answerHas": "220.000",
+        "tipo": "parafrasis",
+        "nueva": true
+    },
+    {
+        "q": "¿Cuántos meses de contrato debo llevar para poder trabajar desde casa?",
+        "expect": "más de 6 meses de antigüedad",
+        "answerHas": "6 meses",
+        "tipo": "parafrasis",
+        "nueva": true
+    },
+    {
+        "q": "¿Cuántas veces puedo dejar sin tomar mi descanso anual antes de que la empresa me lo imponga?",
+        "expect": "acumular hasta 2 períodos",
+        "answerHas": "2 per",
+        "tipo": "parafrasis",
+        "nueva": true
+    },
+    {
+        "q": "¿Qué parte de la cuota del seguro médico extra paga la empresa?",
+        "expect": "asume el 70 %",
+        "answerHas": "70",
+        "tipo": "parafrasis",
+        "nueva": true
+    },
+    {
+        "q": "¿En qué meses me califican el rendimiento?",
+        "expect": "en junio y en diciembre",
+        "answerHas": "junio",
+        "tipo": "parafrasis",
+        "nueva": true
+    },
+    {
+        "q": "cnato me dan pa comer si viajo a cali",
+        "expect": "75.000 en las demás ciudades principales",
+        "answerHas": "75.000",
+        "tipo": "ortografia",
+        "nueva": true
+    },
+    {
+        "q": "kien autoriza las oras extras y con q formulario",
+        "expect": "mediante el formulario HE-02",
+        "answerHas": "HE-02",
+        "tipo": "ortografia",
+        "nueva": true
+    },
+    {
+        "q": "cuantos dias abiles tarda la balidacion de un proveedor nuebo",
+        "expect": "hasta 10 días hábiles",
+        "answerHas": "10 dias",
+        "tipo": "ortografia",
+        "nueva": true
+    },
+    {
+        "q": "en cuanto tiempo atienden un insidente critico",
+        "expect": "máximo de 30 minutos",
+        "answerHas": "30 minutos",
+        "tipo": "ortografia",
+        "nueva": true
+    },
+    {
+        "q": "a k ora abre la mesa de ayuda",
+        "expect": "de 7:00 a. m. a 6:00 p. m.",
+        "answerHas": "7:00",
+        "tipo": "ortografia",
+        "nueva": true
+    },
+    {
+        "q": "Necesito comprar algo de 12 millones: ¿quién lo aprueba y cuántas cotizaciones piden?",
+        "expect": "las aprueba la gerencia financiera",
+        "answerHas": "gerencia financiera",
+        "tipo": "combinar",
+        "nueva": true
+    },
+    {
+        "q": "Llevo 3 años en la empresa, ¿cuántos días hábiles de vacaciones he acumulado en total?",
+        "expect": "15 días hábiles de vacaciones",
+        "answerHas": "45",
+        "tipo": "combinar",
+        "nueva": true
+    },
+    {
+        "q": "Soy teletrabajador y me nace un hijo: ¿cuánto dinero sumo entre el bono y el auxilio de un mes?",
+        "expect": "bono de 400.000 pesos",
+        "answerHas": "460.000",
+        "tipo": "combinar",
+        "nueva": true
+    },
+    {
+        "q": "Viajo 3 noches a Bogotá, ¿cuánto es el máximo que cubren de hospedaje en total?",
+        "expect": "280.000 pesos por noche en Bogotá",
+        "answerHas": "840.000",
+        "tipo": "combinar",
+        "nueva": true
+    },
+    {
+        "q": "¿Qué dos formularios necesito para teletrabajar y para salir de vacaciones?",
+        "expect": "TH-12",
+        "answerHas": "TH-12",
+        "tipo": "combinar",
+        "nueva": true
+    },
+    {
+        "q": "¿Quién aprueba una compra de exactamente 1.000.000 de pesos?",
+        "expect": "hasta 1.000.000 de pesos las aprueba el jefe directo",
+        "answerHas": "jefe directo",
+        "tipo": "rangos",
+        "nueva": true
+    },
+    {
+        "q": "¿Y una compra de 50.000.000 justos, quién la aprueba?",
+        "expect": "Entre 10.000.001 y 50.000.000",
+        "answerHas": "gerencia financiera",
+        "tipo": "rangos",
+        "nueva": true
+    },
+    {
+        "q": "¿Cuál es el mínimo de cotizaciones para una compra de 6 millones?",
+        "expect": "tres cotizaciones",
+        "answerHas": "tres",
+        "tipo": "rangos",
+        "nueva": true
+    },
+    {
+        "q": "Saqué 2,8 en mi evaluación de desempeño, ¿qué pasa ahora?",
+        "expect": "inferior a 3 genera un plan de mejora de 90 días",
+        "answerHas": "90 dias",
+        "tipo": "rangos",
+        "nueva": true
+    },
+    {
+        "q": "Llegué tarde 4 veces este mes, ¿qué me hacen?",
+        "expect": "A partir del cuarto retraso",
+        "answerHas": "descuent",
+        "tipo": "rangos",
+        "nueva": true
+    },
+    {
+        "q": "¿Cuánto es el viático de alimentación si viajo al exterior?",
+        "tipo": "trampa",
+        "nueva": true
+    },
+    {
+        "q": "¿En cuánto tiempo resuelve TI un incidente de prioridad baja?",
+        "tipo": "trampa",
+        "nueva": true
+    },
+    {
+        "q": "¿La empresa me paga una silla ergonómica para trabajar en casa?",
+        "tipo": "trampa",
+        "nueva": true
+    },
+    {
+        "q": "¿Cuántos días de licencia me dan por luto de un familiar?",
+        "tipo": "trampa",
+        "nueva": true
+    },
+    {
+        "q": "¿De cuánto es el auxilio de transporte mensual?",
+        "tipo": "trampa",
+        "nueva": true
     }
 ]

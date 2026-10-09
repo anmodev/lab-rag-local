@@ -13,8 +13,9 @@ API (desde `api/`, Node 24+, ESM): copiar `.env.example` a `.env`, luego `npm in
 
 La evaluacion es la suite de pruebas, y ambas necesitan el servidor andando:
 - `node eval/run.js`: solo recuperacion (`/search`). Muestra en que puesto sale el chunk esperado y el hueco de similitud con que se calibra `MIN_SIMILARITY`. Tarda segundos.
-- `node eval/ask.js [concurrencia]`: pipeline completo (`/ask`). Califica la respuesta del modelo y mide tiempos. Tarda minutos (unos 3 a 4). Argumento: preguntas en simultaneo (1 por defecto). Variable opcional `ANSWER_WIDTH` para el ancho de la columna de respuesta.
-- Los casos estan en `api/eval/questions.json`: `q`, `expect` (texto que debe estar en el chunk correcto, lo usa `run.js`) y `answerHas` (texto que debe estar en la respuesta, lo usa `ask.js`). Sin ninguno de los dos, la pregunta no esta en los documentos y se espera que el modelo diga que no sabe. Variable `API_URL`.
+- `node eval/ask.js [concurrencia]`: pipeline completo (`/ask`). Califica la respuesta del modelo y mide tiempos (en segundos desde 1 s, en ms por debajo). Tarda minutos (unos 5 con las 45 preguntas). Argumento: preguntas en simultaneo (1 por defecto). Variable opcional `ANSWER_WIDTH` para el ancho de la columna de respuesta.
+- Los casos estan en `api/eval/questions.json` (45: 20 originales + 25 nuevas): `q`, `expect` (texto que debe estar en el chunk correcto, lo usa `run.js`) y `answerHas` (texto que debe estar en la respuesta, lo usa `ask.js`; es una sola cadena). Sin ninguno de los dos, la pregunta no esta en los documentos y se espera que el modelo diga que no sabe. Las nuevas llevan `nueva: true` y `tipo` (`parafrasis`, `ortografia`, `combinar`, `rangos`, `trampa`); los scripts ignoran esos dos campos. Variable `API_URL`.
+- Para ver una respuesta completa (la tabla la corta) y los chunks que leyo el modelo: `curl.exe -X POST http://localhost:3000/ask -H "Content-Type: application/json" -d "{\"question\":\"...\"}"`. El campo `sources` es exactamente lo que llego al modelo.
 
 ## Arquitectura
 
@@ -41,7 +42,12 @@ API Express 5 (`api/src`) delante de dos servicios Docker. La API corre fuera de
 ## Evaluacion: reglas y hallazgos
 
 - Cambiar una sola variable por corrida (modelo, prompt, chunker, concurrencia) y comparar contra una referencia.
-- Referencia con `chunkMarkdown` y `llama3.2:3b`: `run.js` deja las 14 preguntas con respuesta en el top-5 (13 en el puesto 1); `ask.js 4` da 19/20 en el script y tarda ~140 s. El fallo restante es maternidad: el modelo responde "no se menciona", que es correcto en el fondo.
+- Referencia con `chunkMarkdown` y `llama3.2:3b`, solo las 20 originales: `run.js` deja las 14 preguntas con respuesta en el top-5 (13 en el puesto 1); `ask.js 4` da 19/20 en el script y tarda ~140 s. El fallo restante es maternidad: el modelo responde "no se menciona", que es correcto en el fondo.
+- Referencia con las 45 preguntas (mismo modelo, chunker y prompt): `run.js` deja las 34 con respuesta en el top-5 (30 en el puesto 1); `ask.js 4` da 42/45 en ~326 s. Las 20 originales dan 20/20; las 25 nuevas, 22/25 (parafrasis 5/5, ortografia 4/5, combinar 3/5, rangos 5/5, trampas 5/5).
+- Los 3 fallos nuevos (#25 comer en Cali, #30 aprobador de 12 millones, #31 vacaciones por 3 anos) son de lectura del modelo, no de recuperacion: el chunk correcto estaba en el prompt. Con `curl` #30 y #31 aciertan al cambiar la redaccion (la doble pregunta de #30 no era la causa), asi que el modelo de 3B es sensible a la redaccion y un fallo aislado no se debe leer como "no sabe el tema". #25 pide inferir que Cali es "ciudad principal" y el documento no lo dice.
+- Las trampas (cercanas al tema, sin dato) llegan a similitud ~0.67, por encima de casi todos los aciertos: el umbral no las filtra y llegan al modelo con 2 o 3 chunks. En esta corrida el modelo dijo que no sabia en las 5, pero es una muestra pequena.
+- Huecos del calificador: `answerHas` es una sola cadena, asi que en preguntas de dos partes solo se califica una; y una respuesta mezclada pasa si contiene "no se menciona" o "no tengo informacion" en cualquier lugar (maternidad figura OK aunque empieza citando la licencia de paternidad). `run.js` tambien comprueba un solo chunk en las preguntas que cruzan dos documentos.
+- La suma de `modelo_ms` (~334 s) volvio a superar el tiempo total (~326 s) con concurrencia 4: sigue sin explicarse. Los prompts de esta corrida llegaron a 825 tokens como maximo, asi que no aportan nada sobre el recorte silencioso del contexto.
 - Con `MIN_SIMILARITY=0.45`: los aciertos quedan desde ~0.49, las preguntas lejanas del tema hasta ~0.40, pero las preguntas cercanas al tema sin respuesta llegan a ~0.55-0.58 y se traslapan con los aciertos. Esas las resuelve el modelo, no el umbral.
 - Los modelos de 3B confunden rangos y temas parecidos. `qwen2.5:3b` no fue mejor (18/20) y un prompt que pedia "el dato exacto" empeoro el resultado (16/20). No retocar el prompt sin medir.
 - El chunker por secciones mejoro la velocidad (~190 s -> ~140 s con concurrencia 4, menos tokens por prompt) y arreglo el error del incidente critico.
@@ -50,15 +56,26 @@ API Express 5 (`api/src`) delante de dos servicios Docker. La API corre fuera de
 ## Forma de trabajo
 
 - El usuario esta aprendiendo: explicar que hace cada comando antes de pedirle que lo corra. Un cambio a la vez.
+- Los comandos de operacion (docker compose, npm run dev, evaluaciones, curl) los corre el usuario en su cmd; no levantar servicios ni correr evaluaciones por su cuenta. Si algo queda corriendo, avisar y cerrarlo.
 - Pedir confirmacion antes de borrar datos (`DELETE FROM documents`, `docker compose down -v`).
 - Piloto futuro en .NET, posiblemente con SQL Server 2012 (sin tipo vector): mantener el acceso a datos aislado en `repository.js`.
 
 ## Pendientes
 
 - Indice HNSW y comparar con `EXPLAIN` contra el escaneo exacto.
-- Set de evaluacion mas dificil: preguntas parafraseadas, con errores de ortografia, que combinen dos secciones, con rangos numericos y trampas cercanas al tema.
+- Set de evaluacion: ya hay 25 preguntas dificiles (ver arriba). Falta medir consistencia: varias redacciones de la misma pregunta y contar cuantas se responden bien siempre. Reformular #31 ("acumulado" choca con la seccion Acumulacion de la politica de vacaciones).
+- Calificador: que `answerHas` acepte una lista y exija todos los textos, y que `run.js` compruebe los dos chunks en preguntas que cruzan documentos. Cambia la comparacion con las referencias: medirlo aparte.
 - Respuestas en streaming y limite de concurrencia en la API.
 - Extractores para PDF, Word y PowerPoint (por ejemplo un servicio de conversion tipo MarkItDown o Docling).
 - Unir secciones muy cortas en el chunker de Markdown.
 - Corte relativo al primer resultado, para no mandar chunks de relleno al modelo.
 - Fijar la version de la imagen de Ollama y sacar las credenciales del compose a `.env`.
+
+## Para el piloto (modelo de chat mas grande)
+
+La recuperacion (bge-m3) y el umbral no dependen del modelo de chat; lo que se espera que mejore es la lectura del contexto (rangos, redaccion, "no se"). Protocolo para comparar:
+
+- Cambiar solo `CHAT_MODEL`, con el mismo set de 45, el mismo prompt y el mismo chunker, y comparar contra la referencia de 42/45. Con 3 fallos de base, una diferencia de 1 o 2 preguntas es ruido: apoyarse en el set de consistencia (varias redacciones).
+- Un modelo con razonamiento es otra variable: genera texto de pensamiento antes de responder (mas tokens y mas lento en CPU) y hay que ver como lo devuelve Ollama y que hace `routes/ask.js` con ese texto. Probarlo por separado del tamano.
+- Anotar el hardware del piloto junto a los resultados: los tiempos no son comparables con este equipo (16 GB, WSL a 6 GB, CPU). Un modelo de 7B a 8B cuantizado ocupa unos 5 GB y aqui quedaria justo con bge-m3 cargado.
+- Revisar el limite de 300 s de `fetch` en `eval/ask.js` y `OLLAMA_CONTEXT_LENGTH` si el modelo es mas lento o los prompts mas largos.

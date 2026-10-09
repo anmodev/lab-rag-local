@@ -1,15 +1,29 @@
+# Infraestructura local del laboratorio: Ollama (modelos de embeddings y chat)
+# y Postgres con pgvector (documentos, chunks y vectores). La API de Node corre
+# fuera de Docker y se conecta a estos dos servicios por localhost.
 services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
+    # Atado a 127.0.0.1 para que Ollama no quede expuesto a la red local.
     ports:
       - "127.0.0.1:11434:11434"
+    # Volumen nombrado: los modelos descargados sobreviven a recrear el contenedor.
     volumes:
       - ollama_data:/root/.ollama
     environment:
+      # Maximo de modelos en memoria a la vez. 2 = bge-m3 (embeddings) y el
+      # modelo de chat juntos, sin descargar uno para cargar el otro.
       - OLLAMA_MAX_LOADED_MODELS=2
+      # Una sola peticion a la vez por modelo. Con poca RAM es lo mas estable;
+      # las demas esperan en cola.
       - OLLAMA_NUM_PARALLEL=1
+      # Cuanto tiempo queda un modelo cargado sin uso. La primera consulta
+      # despues de este tiempo paga el costo de carga (loadMs en /ask).
       - OLLAMA_KEEP_ALIVE=5m
+      # Ventana de contexto en tokens. Si el prompt (system + chunks + pregunta)
+      # se pasa de este valor, Ollama recorta sin avisar y el modelo responde
+      # sin ver parte del contexto. Cuidado al subir k o CHUNK_SIZE.
       - OLLAMA_CONTEXT_LENGTH=4096
     deploy:
       resources:
@@ -21,14 +35,19 @@ services:
   db:
     image: pgvector/pgvector:pg16
     container_name: rag_db
+    # Mismo criterio que Ollama: solo accesible desde esta maquina.
     ports:
       - "127.0.0.1:5432:5432"
+    # Credenciales de laboratorio, no usar tal cual fuera de local.
     environment:
       - POSTGRES_DB=rag_db
       - POSTGRES_USER=rag_user
       - POSTGRES_PASSWORD=rag_password
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # init.sql solo se ejecuta cuando el volumen pgdata se crea por primera
+      # vez. Si cambias el esquema despues, hay que aplicarlo a mano o borrar
+      # el volumen (docker compose down -v, pierde todos los datos).
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     deploy:
       resources:

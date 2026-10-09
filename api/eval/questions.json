@@ -1,35 +1,73 @@
 [
     {
         "q": "cual es el tope de hospedaje por noche en bogota",
-        "expect": "280.000"
+        "expect": "280.000",
+        "answerHas": "280.000"
     },
     {
         "q": "que formulario uso para registrar un proveedor nuevo",
-        "expect": "PV-01"
+        "expect": "PV-01",
+        "answerHas": "PV-01"
     },
     {
         "q": "cuantos caracteres minimo debe tener la contrasena",
-        "expect": "12 caracteres"
+        "expect": "12 caracteres",
+        "answerHas": "12 caracteres"
     },
     {
         "q": "cuanto es el bono por nacimiento de un hijo",
-        "expect": "400.000"
+        "expect": "400.000",
+        "answerHas": "400.000"
     },
     {
         "q": "cuantas horas de capacitacion al ano debo completar",
-        "expect": "24 horas de capac"
+        "expect": "24 horas de capac",
+        "answerHas": "24 horas"
     },
     {
         "q": "de cuanto es el auxilio de conectividad del teletrabajo",
-        "expect": "60.000"
+        "expect": "60.000",
+        "answerHas": "60.000"
     },
     {
         "q": "que formulario lleno para pedir vacaciones",
-        "expect": "TH-07"
+        "expect": "TH-07",
+        "answerHas": "TH-07"
     },
     {
         "q": "hasta cuanto cubre el auxilio educativo",
-        "expect": "3.000.000"
+        "expect": "3.000.000",
+        "answerHas": "3.000.000"
+    },
+    {
+        "q": "quien aprueba una compra de 7 millones de pesos",
+        "expect": "1.000.001",
+        "answerHas": "gerente de area"
+    },
+    {
+        "q": "cuanto tarda en resolverse un incidente critico",
+        "expect": "se resuelven en 4 horas",
+        "answerHas": "4 horas"
+    },
+    {
+        "q": "en cuantos dias debo legalizar los gastos de un viaje",
+        "expect": "LG-11",
+        "answerHas": "5 dias"
+    },
+    {
+        "q": "cada cuanto debo cambiar mi contrasena",
+        "expect": "Se cambian cada",
+        "answerHas": "90 dias"
+    },
+    {
+        "q": "cuanto tiempo tengo para avisar a TI si pierdo el portatil",
+        "expect": "bloquearlo de forma remota",
+        "answerHas": "2 horas"
+    },
+    {
+        "q": "con cuantos dias de anticipacion debo solicitar las vacaciones",
+        "expect": "mediante el formulario TH-07",
+        "answerHas": "20 dias"
     },
     {
         "q": "cuantos dias de licencia de maternidad da la empresa"

@@ -14,6 +14,8 @@ CONSULTA
 pregunta -> embedding -> top-k chunks similares -> filtro por umbral -> llama3.2:3b -> respuesta + fuentes
 ```
 
+Los `.md` se dividen por secciones de titulos; los demas tipos, por tamano (ver "Como se dividen los documentos").
+
 ## Tecnologias
 
 | Pieza | Tecnologia |
@@ -29,6 +31,8 @@ pregunta -> embedding -> top-k chunks similares -> filtro por umbral -> llama3.2
 - Docker Desktop con WSL2. Limites sugeridos en `%USERPROFILE%\.wslconfig`:
   `memory=6GB`, `processors=8`, `swap=4GB`
 - Node 24 o superior
+- 16 GB de RAM en total. Con los dos modelos cargados el equipo queda justo: cierra apps pesadas
+  antes de las evaluaciones largas.
 
 ## Levantar el lab
 
@@ -45,7 +49,13 @@ docker exec ollama ollama pull bge-m3
 docker exec ollama ollama pull llama3.2:3b
 ```
 
-3. API. Crea `api/.env`:
+3. API. Crea `api/.env` a partir de la plantilla (desde la carpeta `api`):
+
+```
+copy .env.example .env
+```
+
+Su contenido es:
 
 ```text
 PORT=3000
@@ -61,11 +71,11 @@ MIN_SIMILARITY=0.45
 Luego:
 
 ```
-cd api
 npm install
 npm run dev
 ```
 
+Si cambias el `.env`, reinicia el servidor a mano (`Ctrl+C` y `npm run dev`): `--watch` solo vigila los `.js`.
 `db/init.sql` (extension y tablas) solo corre la primera vez que se crea el volumen de Postgres.
 
 ## Probar
@@ -76,7 +86,7 @@ Salud de la API y la base de datos:
 curl.exe http://localhost:3000/health
 ```
 
-Subir un documento (de `data/docs/`):
+Subir un documento (de `data/docs/`, desde la raiz del repo):
 
 ```
 curl.exe -F "file=@data/docs/manual-colaborador.md" http://localhost:3000/documents
@@ -94,11 +104,36 @@ Preguntar (busca y responde con el modelo):
 curl.exe -X POST http://localhost:3000/ask -H "Content-Type: application/json" -d "{\"question\":\"cada cuanto debo cambiar mi contrasena\"}"
 ```
 
-Evaluar la recuperacion con un set de preguntas (desde `api/`, con el servidor andando):
+## Evaluar
+
+Las preguntas estan en `api/eval/questions.json`. Se corren desde `api/` con el servidor andando.
+
+Solo la recuperacion (rapido, segundos). Muestra en que puesto sale el chunk correcto y
+la similitud, y al final compara aciertos contra preguntas sin respuesta para calibrar `MIN_SIMILARITY`:
 
 ```
 node eval/run.js
 ```
+
+El pipeline completo con el modelo (tarda unos 3 a 4 minutos). Imprime la respuesta, si es correcta,
+cuantos chunks y tokens uso y los tiempos. El numero es cuantas preguntas se mandan en simultaneo:
+
+```
+node eval/ask.js 1
+node eval/ask.js 4
+```
+
+Para ver la respuesta completa en la tabla, antes de correrlo: `set ANSWER_WIDTH=300`.
+
+## Como se dividen los documentos
+
+- **Markdown (`.md`)**: un chunk por seccion, con la ruta de titulos como primera linea
+  (por ejemplo `Manual > 5. Compras`). Si una seccion es mas larga que `CHUNK_SIZE`, se parte en trozos
+  y cada uno conserva la ruta.
+- **Otros tipos (`.txt`)**: cortes por parrafo, linea, oracion y palabra, con `CHUNK_SIZE` y `CHUNK_OVERLAP`.
+
+Si cambias estos parametros o el chunker, hay que borrar los documentos y volver a subirlos
+(ver "Utiles"), porque los duplicados se detectan por el hash del archivo.
 
 ## Endpoints
 
@@ -115,23 +150,82 @@ node eval/run.js
 docker-compose.yml     Ollama + Postgres
 db/init.sql            extension vector y tablas documents / chunks
 data/docs/             documentos de prueba
+CLAUDE.md              guia del proyecto para Claude Code
 api/
+  .env.example         plantilla de configuracion
   src/
     server.js          arranque, rutas y manejo de errores
     config.js          variables de entorno
     db.js              pool de Postgres y transacciones
     extractors.js      extraccion de texto por tipo de archivo
-    chunker.js         division en chunks con overlap
+    chunker.js         chunkText (por tamano) y chunkMarkdown (por secciones)
     ollama.js          embeddings y chat
     repository.js      todo el SQL en un solo lugar
     routes/            documents.js, search.js, ask.js
-  eval/                questions.json y run.js
+  eval/                questions.json, run.js (recuperacion) y ask.js (pipeline completo)
+```
+
+## Resultados de referencia
+
+Con 20 preguntas (14 con respuesta y 6 sin ella), `llama3.2:3b` y el chunker por secciones:
+
+| Prueba | Resultado |
+|---|---|
+| `run.js` | 14/14 en el top-5, 13 en el puesto 1 |
+| `ask.js 4` | 19/20, unos 140 s en total |
+
+Lo aprendido hasta ahora:
+- `MIN_SIMILARITY=0.45` separa las preguntas lejanas del tema (hasta ~0.40) de los aciertos (desde ~0.49).
+  Las preguntas cercanas al tema pero sin respuesta (~0.55 a 0.58) se mezclan con los aciertos: las resuelve el modelo.
+- Los modelos de 3B confunden rangos y temas parecidos. Cambiar de modelo o retocar el prompt no mejoro: conviene medir antes de cambiar.
+- Ollama atiende de a poco: unas 5 a 6 preguntas por minuto en este equipo, sin importar cuantas lleguen juntas.
+
+## Ver la base de datos desde consola
+
+No hace falta un cliente grafico: se consulta con `psql` dentro del contenedor `rag_db`
+(`-U` usuario, `-d` base, `-c` ejecuta una sentencia y sale).
+
+Documentos cargados:
+
+```
+docker exec rag_db psql -U rag_user -d rag_db -c "SELECT id, filename, size_bytes, created_at FROM documents ORDER BY id;"
+```
+
+Cuantos chunks tiene cada documento:
+
+```
+docker exec rag_db psql -U rag_user -d rag_db -c "SELECT d.id, d.filename, count(*) AS chunks FROM chunks c JOIN documents d ON d.id = c.document_id GROUP BY d.id, d.filename ORDER BY d.id;"
+```
+
+Chunks de un documento (cambia el `6` por el id), con su largo y el inicio del texto:
+
+```
+docker exec rag_db psql -U rag_user -d rag_db -c "SELECT chunk_index, length(content) AS caracteres, left(content, 70) AS inicio FROM chunks WHERE document_id = 6 ORDER BY chunk_index;"
+```
+
+Texto completo de un chunk (`-t -A` imprime solo el texto, sin bordes ni encabezados):
+
+```
+docker exec rag_db psql -U rag_user -d rag_db -t -A -c "SELECT content FROM chunks WHERE document_id = 6 AND chunk_index = 4;"
+```
+
+Comprobar que los vectores tienen 1024 dimensiones:
+
+```
+docker exec rag_db psql -U rag_user -d rag_db -c "SELECT chunk_index, vector_dims(embedding) AS dimensiones FROM chunks WHERE document_id = 6 ORDER BY chunk_index LIMIT 3;"
+```
+
+Sesion interactiva (`-it` conecta tu teclado). Dentro: `\dt` lista tablas, `\d chunks` muestra
+las columnas, `\q` sale:
+
+```
+docker exec -it rag_db psql -U rag_user -d rag_db
 ```
 
 ## Utiles
 
 Borrar todos los documentos (los chunks se borran en cascada). Necesario antes de
-re-subir un archivo con otros parametros de chunk, porque el dedupe es por hash del archivo:
+re-subir un archivo con otros parametros o con otro chunker, porque el dedupe es por hash del archivo:
 
 ```
 docker exec rag_db psql -U rag_user -d rag_db -c "DELETE FROM documents;"
@@ -148,3 +242,10 @@ Reiniciar todo desde cero (borra modelos y datos):
 ```
 docker compose down -v
 ```
+
+## Pendientes
+
+- Indice HNSW y comparar con `EXPLAIN` contra el escaneo exacto.
+- Set de evaluacion mas dificil (preguntas parafraseadas, con errores de ortografia, que combinen secciones).
+- Respuestas en streaming y limite de concurrencia en la API.
+- Mas tipos de archivo (PDF, Word, PowerPoint) para el piloto.

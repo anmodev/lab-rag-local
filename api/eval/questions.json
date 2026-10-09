@@ -1,0 +1,52 @@
+[
+    {
+        "q": "cual es el tope de hospedaje por noche en bogota",
+        "expect": "280.000"
+    },
+    {
+        "q": "que formulario uso para registrar un proveedor nuevo",
+        "expect": "PV-01"
+    },
+    {
+        "q": "cuantos caracteres minimo debe tener la contrasena",
+        "expect": "12 caracteres"
+    },
+    {
+        "q": "cuanto es el bono por nacimiento de un hijo",
+        "expect": "400.000"
+    },
+    {
+        "q": "cuantas horas de capacitacion al ano debo completar",
+        "expect": "24 horas de capac"
+    },
+    {
+        "q": "de cuanto es el auxilio de conectividad del teletrabajo",
+        "expect": "60.000"
+    },
+    {
+        "q": "que formulario lleno para pedir vacaciones",
+        "expect": "TH-07"
+    },
+    {
+        "q": "hasta cuanto cubre el auxilio educativo",
+        "expect": "3.000.000"
+    },
+    {
+        "q": "cuantos dias de licencia de maternidad da la empresa"
+    },
+    {
+        "q": "cuanto pagan por una hora extra nocturna"
+    },
+    {
+        "q": "como solicito un prestamo a la empresa"
+    },
+    {
+        "q": "cual es el salario del gerente general"
+    },
+    {
+        "q": "cual es la capital de Francia"
+    },
+    {
+        "q": "dame una receta de arroz con pollo"
+    }
+]

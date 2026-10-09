@@ -1,0 +1,42 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_KEEP_ALIVE=5m
+      - OLLAMA_CONTEXT_LENGTH=4096
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 5G
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rag_db
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      - POSTGRES_DB=rag_db
+      - POSTGRES_USER=rag_user
+      - POSTGRES_PASSWORD=rag_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  pgdata:

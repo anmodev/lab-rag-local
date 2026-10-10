@@ -23,7 +23,7 @@ Evaluacion (necesita el servidor andando, desde `api/`):
 
 API Express 5 (`api/src`) delante de dos servicios Docker. La API corre fuera de Docker y los alcanza por localhost.
 
-- Ingesta (`routes/documents.js`): subida -> `extractors.js` (por extension, solo .txt y .md) -> chunker -> embeddings por lotes en `ollama.js` -> `repository.saveDocument` (una transaccion). Duplicados por SHA-256 (409). `GET /documents` lista lo cargado.
+- Ingesta (`routes/documents.js`): subida -> `extractors.js` (por extension, solo .txt y .md) -> chunker -> embeddings por lotes en `ollama.js` -> `repository.saveDocument` (una transaccion). Duplicados por SHA-256 (409). `GET /documents` lista lo cargado; `DELETE /documents[/:id]` borra; `POST /documents/:id/reindex` y `POST /documents/reindex` revectorizan desde `documents.content` (se vectoriza primero y los chunks se cambian en una transaccion, asi un fallo de Ollama no deja el documento vacio). `ensureSchema()` agrega la columna `content` al arrancar si la base es vieja.
 - Chunker (`chunker.js`): los `.md` usan `chunkMarkdown`: un chunk por seccion de titulos con la ruta "Documento > Seccion" como primera linea. `CHUNK_SIZE` es un tamano OBJETIVO: una seccion que lo pasa hasta un 25 % se queda entera; una mas larga se reparte parejo en bloques (parrafos, listas, tablas, codigo) sin partirlos; dentro de un bloque se corta por oraciones (sin cortar en "a. m."), filas (repitiendo el encabezado) o lineas (conservando las cercas). Los demas tipos usan `chunkText`.
 - Consulta (`routes/search.js`, `routes/ask.js`): vectoriza la pregunta -> `repository.searchChunks` (coseno, exacta, sin indice) -> `/ask` toma `k=5` y filtra por `MIN_SIMILARITY`; si nada pasa, responde la frase fija "no tengo informacion" sin llamar al modelo -> `CHAT_MODEL` con un system prompt que lo limita al contexto. `temperature: 0` y `seed: 42`. Con `ASK_REASONING=true` el modelo razona en una linea antes de responder y `reply.js` separa razonamiento y respuesta. `POST /ask/stream` entrega la respuesta por partes (una linea JSON por evento).
 - Los embeddings se piden en CPU (`num_gpu: 0` en `ollama.js`): con 4 GB de VRAM el modelo de embeddings y el de chat se expulsaban entre si y cada pregunta pagaba una recarga.
@@ -36,7 +36,7 @@ API Express 5 (`api/src`) delante de dos servicios Docker. La API corre fuera de
 
 - La dimension de los embeddings (1024, bge-m3) esta en tres lugares: `vector(1024)` en `db/init.sql`, `EMBED_DIMENSIONS` en `config.js` y el propio modelo. Cambiar de modelo implica cambiar todo y re-vectorizar.
 - `db/init.sql` solo corre cuando se crea el volumen `pgdata` por primera vez. Los cambios de esquema se aplican a mano o con `docker compose down -v` (borra datos y modelos).
-- Cambiar los parametros de chunking o el codigo del chunker obliga a vaciar los documentos antes de re-subirlos (`TRUNCATE documents RESTART IDENTITY CASCADE;`), porque el dedupe es por hash del archivo.
+- Cambiar los parametros de chunking o el codigo del chunker no obliga a re-subir: `POST /documents/reindex` (boton "Reindexar todos") vuelve a dividir y vectorizar el texto que cada documento guarda en `documents.content`. Los documentos cargados antes de esa columna tienen `content` en NULL: no se reindexan (409 / `skipped`), hay que borrarlos y subirlos otra vez. Subir el mismo archivo sigue siendo duplicado por hash.
 - `docker-compose.yml` limita Ollama a 8 CPUs: en un equipo con menos nucleos Docker no arranca el contenedor (`range of CPUs is from 0.01 to N`). Los ajustes de un equipo (GPU, CPUs, memoria) van en un `docker-compose.override.yml` local, que git ignora.
 - `OLLAMA_CONTEXT_LENGTH=4096`. `/ask` limita `k` a 10; con `k=5` y chunks de ~400 caracteres el prompt ronda los 700 a 1000 tokens.
 - Memoria: PC de 16 GB con WSL limitado (`.wslconfig`). Con los dos modelos cargados el sistema llega al ~90 % y se pone lento. Cerrar apps antes de evaluaciones largas.
@@ -70,5 +70,4 @@ API Express 5 (`api/src`) delante de dos servicios Docker. La API corre fuera de
 - Busqueda hibrida (texto + vectores) para codigos exactos como `PV-01`.
 - Autenticacion y limite de cola en la API antes de exponerla fuera de localhost.
 - Extractores para PDF, Word y PowerPoint (por ejemplo MarkItDown o Docling).
-- Borrar documentos desde el front.
 - Fijar la version de la imagen de Ollama y sacar las credenciales del compose a `.env`.

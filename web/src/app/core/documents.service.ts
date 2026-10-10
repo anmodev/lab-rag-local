@@ -46,4 +46,17 @@ export class DocumentsService {
     body.append('file', file);
     return firstValueFrom(this.http.post<UploadResult>('/api/documents', body));
   }
+
+  remove(id: string): Promise<{ deleted: number }> {
+    return firstValueFrom(this.http.delete<{ deleted: number }>(`/api/documents/${id}`));
+  }
+
+  removeAll(): Promise<{ deleted: number }> {
+    return firstValueFrom(this.http.delete<{ deleted: number }>('/api/documents'));
+  }
+
+  // Vuelve a dividir y vectorizar el texto guardado del documento. Responde igual que la subida.
+  reindex(id: string): Promise<UploadResult> {
+    return firstValueFrom(this.http.post<UploadResult>(`/api/documents/${id}/reindex`, {}));
+  }
 }

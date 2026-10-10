@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS documents (
   -- SHA-256 del archivo. UNIQUE evita cargar dos veces el mismo archivo
   -- aunque dos requests lleguen a la vez (la base es la ultima defensa).
   content_hash TEXT NOT NULL UNIQUE,
+  -- Texto extraido del archivo. Permite reindexar sin volver a subirlo.
+  -- (La API tambien lo agrega sola a bases viejas: ver ensureSchema.)
+  content      TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

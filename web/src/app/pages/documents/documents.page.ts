@@ -59,6 +59,9 @@ export class DocumentsPage implements OnInit, OnDestroy {
   // Avance del lote: cuantos archivos se aceptaron y cuantos ya terminaron.
   protected readonly batchTotal = signal(0);
   protected readonly batchDone = signal(0);
+  protected readonly totalChunks = computed(() =>
+    this.documents().reduce((sum, d) => sum + d.chunk_count, 0),
+  );
   protected readonly batchPercent = computed(() =>
     this.batchTotal() ? Math.round((this.batchDone() / this.batchTotal()) * 100) : 0,
   );
@@ -101,6 +104,85 @@ export class DocumentsPage implements OnInit, OnDestroy {
     event.preventDefault();
     this.dragging.set(false);
     this.enqueue(event.dataTransfer?.files ?? null);
+  }
+
+  // Mantenimiento de la base: una sola operacion a la vez, y no mientras se sube.
+  protected readonly maintenance = signal<{ text: string; startedAt: number } | null>(null);
+  protected readonly notice = signal<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  protected readonly locked = computed(() => this.busy() || this.maintenance() !== null);
+
+  protected async removeOne(doc: KnowledgeDocument): Promise<void> {
+    if (!confirm(`¿Eliminar "${doc.filename}" y sus ${doc.chunk_count} fragmentos?`)) return;
+    await this.maintain(`Eliminando ${doc.filename}…`, async () => {
+      await this.service.remove(doc.id);
+      return `Se eliminó ${doc.filename}.`;
+    });
+  }
+
+  protected async removeEvery(): Promise<void> {
+    const n = this.documents().length;
+    if (!n) return;
+    if (!confirm(`¿Eliminar los ${n} documentos y todos sus fragmentos? No se puede deshacer.`)) return;
+    await this.maintain('Eliminando todos los documentos…', async () => {
+      const res = await this.service.removeAll();
+      return `Se eliminaron ${res.deleted} documentos.`;
+    });
+  }
+
+  protected async reindexOne(doc: KnowledgeDocument): Promise<void> {
+    await this.maintain(`Reindexando ${doc.filename}…`, async () => {
+      const res = await this.service.reindex(doc.id);
+      return `${doc.filename} reindexado: ${res.chunkCount} fragmentos.`;
+    });
+  }
+
+  // De a uno, para mostrar el avance y seguir con los demas si uno falla.
+  protected async reindexEvery(): Promise<void> {
+    const docs = this.documents();
+    if (!docs.length) return;
+    await this.maintain('', async () => {
+      const failed: string[] = [];
+      for (const [i, doc] of docs.entries()) {
+        this.maintenance.update((m) => ({
+          text: `Reindexando ${i + 1} de ${docs.length}: ${doc.filename}…`,
+          startedAt: m?.startedAt ?? Date.now(),
+        }));
+        try {
+          await this.service.reindex(doc.id);
+        } catch (err) {
+          failed.push(`${doc.filename} (${errorMessage(err)})`);
+        }
+      }
+      if (failed.length) {
+        throw new Error(
+          `Se reindexaron ${docs.length - failed.length} de ${docs.length}. Fallaron: ${failed.join('; ')}`,
+        );
+      }
+      return `Se reindexaron los ${docs.length} documentos.`;
+    });
+  }
+
+  // Envuelve una operacion: bloquea los botones, muestra el texto mientras corre y
+  // deja un aviso (ok o error) al terminar. Siempre refresca la tabla.
+  private async maintain(text: string, action: () => Promise<string>): Promise<void> {
+    this.notice.set(null);
+    this.maintenance.set({ text, startedAt: Date.now() });
+    this.startTimer();
+    try {
+      this.notice.set({ kind: 'ok', text: await action() });
+    } catch (err) {
+      const message = err instanceof HttpErrorResponse ? errorMessage(err) : (err as Error).message;
+      this.notice.set({ kind: 'error', text: message });
+    } finally {
+      this.maintenance.set(null);
+      if (!this.busy()) this.stopTimer();
+      await this.refresh();
+    }
+  }
+
+  protected maintenanceSeconds(): number {
+    const m = this.maintenance();
+    return m ? Math.max(0, Math.floor((this.now() - m.startedAt) / 1000)) : 0;
   }
 
   protected clearFinished(): void {
@@ -221,6 +303,12 @@ export class DocumentsPage implements OnInit, OnDestroy {
     if (s < 2) return 'Subiendo el archivo…';
     if (s < 20) return 'Extrayendo el texto y vectorizando los fragmentos…';
     return 'Vectorizando… los documentos grandes pueden tardar varios minutos';
+  }
+
+  // Extension del archivo (sin el punto) para el icono de la tabla.
+  protected extension(filename: string): string {
+    const dot = filename.lastIndexOf('.');
+    return dot === -1 ? 'doc' : filename.slice(dot + 1);
   }
 
   protected formatSize(bytes: string | null): string {

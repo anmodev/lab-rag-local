@@ -1,7 +1,23 @@
-<h1>Documentos</h1>
-<p class="subtitle">
-  La base de conocimiento: el asistente solo responde con lo que hay en estos archivos.
-</p>
+<header class="page-head">
+  <div>
+    <h1>Documentos</h1>
+    <p class="subtitle">
+      La base de conocimiento: el asistente solo responde con lo que hay en estos archivos.
+    </p>
+  </div>
+  @if (documents().length) {
+    <dl class="stats">
+      <div>
+        <dt>Documentos</dt>
+        <dd>{{ documents().length }}</dd>
+      </div>
+      <div>
+        <dt>Fragmentos</dt>
+        <dd>{{ totalChunks() }}</dd>
+      </div>
+    </dl>
+  }
+</header>
 
 <section
   class="dropzone"
@@ -11,13 +27,21 @@
   (dragleave)="dragging.set(false)"
   (drop)="onDrop($event)"
 >
-  <p>Arrastra aquí tus archivos <strong>.md</strong> o <strong>.txt</strong> (máximo 5 MB cada uno)</p>
-  <label class="button">
+  <span class="drop-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M5 20h14" />
+    </svg>
+  </span>
+  <p class="drop-title">Arrastra tus archivos aquí</p>
+  <p class="drop-hint">Formatos <code>.md</code> y <code>.txt</code> · máximo 5 MB cada uno</p>
+  <label class="btn primary">
     Elegir archivos
     <input type="file" accept=".md,.txt" multiple (change)="onFileInput($event)" />
   </label>
   @if (busy()) {
-    <p class="hint">Puedes seguir agregando archivos; se procesan en orden.</p>
+    <p class="drop-hint">Puedes seguir agregando archivos; se procesan en orden.</p>
   }
 </section>
 
@@ -25,7 +49,7 @@
   <div class="progress" role="status">
     <div class="progress-text">
       <span>Procesando documento {{ batchDone() + 1 }} de {{ batchTotal() }}</span>
-      <span class="muted">{{ batchPercent() }} %</span>
+      <span class="mono muted">{{ batchPercent() }} %</span>
     </div>
     <div
       class="bar"
@@ -42,22 +66,22 @@
 }
 
 @if (uploads().length) {
-  <div class="uploads-header">
+  <div class="section-head">
     <h2>Carga</h2>
     @if (hasFinished()) {
-      <button type="button" class="link" (click)="clearFinished()">Limpiar lista</button>
+      <button type="button" class="btn ghost sm" (click)="clearFinished()">Limpiar lista</button>
     }
   </div>
   <ul class="uploads" aria-live="polite">
     @for (item of uploads(); track item.id) {
       <li [class]="'upload ' + item.status">
-        <span class="icon" aria-hidden="true">
+        <span class="status" aria-hidden="true">
           @switch (item.status) {
             @case ('uploading') {
               <span class="spinner"></span>
             }
             @case ('queued') {
-              <span>⏳</span>
+              <span>…</span>
             }
             @case ('ok') {
               <span>✓</span>
@@ -71,7 +95,7 @@
           }
         </span>
         <div class="info">
-          <span class="name">{{ item.name }} <span class="muted">· {{ item.size }}</span></span>
+          <span class="name">{{ item.name }} <span class="muted mono">{{ item.size }}</span></span>
           <span class="message">
             @if (item.status === 'uploading') {
               {{ uploadingText(item) }}
@@ -80,7 +104,7 @@
             }
           </span>
         </div>
-        <span class="time muted">
+        <span class="time mono muted">
           @if (item.status === 'uploading') {
             {{ elapsed(item) }} s
           } @else if (item.seconds) {
@@ -93,39 +117,100 @@
 }
 
 <section class="list">
-  <div class="list-header">
+  <div class="section-head">
     <h2>Cargados</h2>
-    <button type="button" class="link" (click)="refresh()" [disabled]="loading()">
-      Actualizar
-    </button>
+    <div class="actions">
+      <button type="button" class="btn ghost sm" (click)="refresh()" [disabled]="loading() || locked()">
+        Actualizar
+      </button>
+      <button
+        type="button"
+        class="btn sm"
+        (click)="reindexEvery()"
+        [disabled]="locked() || !documents().length"
+        title="Vuelve a dividir y vectorizar todos los documentos con la configuración actual"
+      >
+        Reindexar todos
+      </button>
+      <button
+        type="button"
+        class="btn sm danger"
+        (click)="removeEvery()"
+        [disabled]="locked() || !documents().length"
+      >
+        Eliminar todos
+      </button>
+    </div>
   </div>
 
+  @if (maintenance(); as m) {
+    <div class="banner working" role="status">
+      <span class="spinner"></span>
+      <span class="grow">{{ m.text }}</span>
+      <span class="mono muted">{{ maintenanceSeconds() }} s</span>
+    </div>
+  }
+  @if (notice(); as n) {
+    <p [class]="'banner ' + (n.kind === 'ok' ? 'ok' : 'bad')" role="status">{{ n.text }}</p>
+  }
+
   @if (loadError()) {
-    <p class="error" role="alert">{{ loadError() }}</p>
+    <p class="banner bad" role="alert">{{ loadError() }}</p>
   } @else if (loading() && !documents().length) {
-    <p class="muted">Cargando...</p>
+    <p class="empty muted">Cargando…</p>
   } @else if (!documents().length) {
-    <p class="muted">Todavía no hay documentos. Sube el primero arriba.</p>
+    <div class="empty">
+      <p class="empty-title">Todavía no hay documentos</p>
+      <p class="muted">Sube el primero arriba y el asistente podrá responder con su contenido.</p>
+    </div>
   } @else {
-    <table>
-      <thead>
-        <tr>
-          <th>Archivo</th>
-          <th class="num">Tamaño</th>
-          <th class="num">Fragmentos</th>
-          <th>Cargado</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (doc of documents(); track doc.id) {
+    <div class="card">
+      <table>
+        <thead>
           <tr>
-            <td>{{ doc.filename }}</td>
-            <td class="num">{{ formatSize(doc.size_bytes) }}</td>
-            <td class="num">{{ doc.chunk_count }}</td>
-            <td>{{ doc.created_at | date: 'dd/MM/yyyy HH:mm' }}</td>
+            <th>Archivo</th>
+            <th class="num hide-sm">Tamaño</th>
+            <th class="num">Fragmentos</th>
+            <th class="hide-sm">Cargado</th>
+            <th class="actions-col"><span class="sr-only">Acciones</span></th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (doc of documents(); track doc.id) {
+            <tr>
+              <td>
+                <span class="file">
+                  <span class="file-icon" aria-hidden="true">{{ extension(doc.filename) }}</span>
+                  <span class="file-name">{{ doc.filename }}</span>
+                </span>
+              </td>
+              <td class="num mono hide-sm">{{ formatSize(doc.size_bytes) }}</td>
+              <td class="num"><span class="badge mono">{{ doc.chunk_count }}</span></td>
+              <td class="muted hide-sm">{{ doc.created_at | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td class="actions-col">
+                <button
+                  type="button"
+                  class="btn ghost sm"
+                  (click)="reindexOne(doc)"
+                  [disabled]="locked()"
+                  [attr.aria-label]="'Reindexar ' + doc.filename"
+                >
+                  Reindexar
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost sm danger"
+                  (click)="removeOne(doc)"
+                  [disabled]="locked()"
+                  [attr.aria-label]="'Eliminar ' + doc.filename"
+                >
+                  Eliminar
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 </section>

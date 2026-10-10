@@ -203,6 +203,10 @@ docker exec rag_db psql -U rag_user -d rag_db -c "TRUNCATE documents RESTART IDE
 
 4. Vuelve a subir los 15 archivos de `data/docs/` desde el front.
 
+Los documentos cargados antes de esta version no tienen su texto guardado (la API agrega la columna
+sola al arrancar, pero no puede recuperarlo): no se pueden reindexar, hay que borrarlos y subirlos
+otra vez. Los que subas desde ahora si.
+
 Para confirmar que quedo bien: la base debe tener 15 documentos y 303 chunks, y desde `api/`
 `node eval/run.js` debe dar 34 con respuesta, 34 en el top-5 y 29 en el puesto 1
 (`node eval/run.js questions-docs.json`: 74, 74 y 64).
@@ -300,6 +304,10 @@ Si cambias estos parametros o el chunker, hay que vaciar los documentos y volver
 | GET | `/health` | Estado de la API y la base de datos |
 | GET | `/documents` | Lista los documentos cargados, con tamano, fecha y cantidad de chunks |
 | POST | `/documents` | Recibe un archivo (campo `file`), lo procesa y lo guarda. 409 si ya existe (mismo hash) |
+| DELETE | `/documents/:id` | Borra un documento y sus chunks. 404 si no existe |
+| DELETE | `/documents` | Borra todos los documentos. Responde `{deleted: n}` |
+| POST | `/documents/:id/reindex` | Vuelve a dividir y vectorizar el texto guardado del documento (por ejemplo tras cambiar `CHUNK_SIZE`). 409 si se cargo antes de que la base guardara el texto: hay que borrarlo y subirlo de nuevo |
+| POST | `/documents/reindex` | Lo mismo con todos, de a uno. Responde `{reindexed, skipped, totalMs}`; los que no tienen texto guardado salen en `skipped` |
 | POST | `/search` | Body `{question, k}`. Devuelve los chunks mas parecidos con su similitud |
 | POST | `/ask` | Body `{question, k}`. Busca, filtra por umbral y responde con el modelo, con fuentes y tiempos |
 | POST | `/ask/stream` | Igual que `/ask`, pero la respuesta llega por partes (una linea JSON por evento: `sources`, `reasoning`, `answer`, `done`, `error`) |
@@ -462,8 +470,13 @@ docker exec -it rag_db psql -U rag_user -d rag_db
 
 ## Utiles
 
-Vaciar todos los documentos (los chunks se borran en cascada y los ids vuelven a 1). Necesario antes
-de re-subir con otros parametros o con otro chunker, porque el dedupe es por hash del archivo:
+Cambiar `CHUNK_SIZE`, `CHUNK_OVERLAP` o el chunker no obliga a re-subir nada: reinicia la API y usa
+**Reindexar todos** en la pantalla Documentos (o `curl.exe -X POST http://localhost:3000/documents/reindex`).
+Cada documento guarda su texto en la base, asi que se vuelve a dividir y vectorizar desde ahi. Si Ollama
+falla a mitad, el documento conserva los fragmentos que tenia.
+
+Borrar documentos: boton **Eliminar** (uno) o **Eliminar todos** en la misma pantalla, o
+`DELETE /documents/:id` y `DELETE /documents`. Por consola, ademas de borrar vuelve los ids a 1:
 
 ```
 docker exec rag_db psql -U rag_user -d rag_db -c "TRUNCATE documents RESTART IDENTITY CASCADE;"

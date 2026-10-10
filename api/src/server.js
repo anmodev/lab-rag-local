@@ -3,6 +3,7 @@
 import express from "express";
 import { config } from "./config.js";
 import { pingDb } from "./db.js";
+import { ensureSchema } from "./repository.js";
 import { documentsRouter } from "./routes/documents.js";
 import { UnsupportedFileError } from "./extractors.js";
 import { OllamaError } from "./ollama.js";
@@ -47,6 +48,8 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: "Error interno" });
 });
+
+await ensureSchema();
 
 app.listen(config.port, () => {
   console.log(`API escuchando en http://localhost:${config.port}`);

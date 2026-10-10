@@ -149,9 +149,11 @@ Si cambias estos parametros o el chunker, hay que borrar los documentos y volver
 | Metodo | Ruta | Que hace |
 |---|---|---|
 | GET | `/health` | Estado de la API y la base de datos |
+| GET | `/documents` | Lista los documentos cargados, con tamano, fecha y cantidad de chunks |
 | POST | `/documents` | Recibe un archivo (campo `file`), lo procesa y lo guarda. 409 si ya existe (mismo hash) |
 | POST | `/search` | Body `{question, k}`. Devuelve los chunks mas parecidos con su similitud |
 | POST | `/ask` | Body `{question, k}`. Busca, filtra por umbral y responde con el modelo, con fuentes y tiempos |
+| POST | `/ask/stream` | Igual que `/ask`, pero la respuesta llega por partes (una linea JSON por evento: `sources`, `reasoning`, `answer`, `done`, `error`) |
 
 ## Estructura
 
@@ -170,9 +172,136 @@ api/
     chunker.js         chunkText (por tamano) y chunkMarkdown (por secciones)
     ollama.js          embeddings y chat
     repository.js      todo el SQL en un solo lugar
+    reply.js           separa razonamiento y respuesta del modelo (completa o por partes)
     routes/            documents.js, search.js, ask.js
   eval/                questions.json, run.js (recuperacion) y ask.js (pipeline completo)
+web/                   front en Angular: pantalla de documentos y chat con streaming
 ```
+
+## Front (Angular)
+
+Dos pantallas: **Documentos** (cargar `.md` y `.txt` y ver lo cargado) y **Chat**
+(las respuestas se van escribiendo en tiempo real, con razonamiento y fuentes).
+Necesita la API andando en el puerto 3000. Desde la carpeta `web`:
+
+```
+npm install
+npm start
+```
+
+Abre `http://localhost:4200`. El servidor de desarrollo reenvia `/api/...` a
+`http://localhost:3000` (ver `web/proxy.conf.json`), asi que no hace falta CORS.
+Para que no pierda la conexion, la API debe estar escuchando en ese puerto.
+
+### Estilo de respuesta (`ASK_REASONING`)
+
+Por defecto `/ask` responde directo, que es lo medido con `llama3.2:3b`. Con
+`ASK_REASONING=true` en `api/.env` el modelo razona antes de responder: arregla
+rangos y cuentas con modelos como `gemma3:4b`, pero con `llama3.2:3b` empeora.
+Cambiarlo obliga a reiniciar la API a mano y conviene medirlo con `eval/ask.js`.
+
+## Configuracion segun el equipo
+
+El mismo codigo corre en equipos distintos, pero tres decisiones dependen del hardware:
+como corre Ollama, que modelo de chat se usa y como se le pide la respuesta.
+
+| Equipo | Como correr Ollama | `CHAT_MODEL` | `ASK_REASONING` | Estado |
+|---|---|---|---|---|
+| Sin GPU, 16 GB | Docker, `docker-compose.yml` tal cual | `llama3.2:3b` | `false` | Medido: 42/45 (326 s en CPU) |
+| NVIDIA con 4 GB de VRAM | Docker + `docker-compose.override.yml` con GPU | `gemma3:4b` | `true` | Medido: 43/45 (~330 s) |
+| NVIDIA con 8 GB o mas | Igual que la anterior | `gemma3:4b` o un 7B | `true` | Sin medir |
+| Mac con Apple Silicon, 16 GB o mas | Ollama nativo + solo `db` en Docker | `gemma3:4b` o un 7B | `true` | Sin medir |
+| Poca RAM (8 GB) | Docker, `docker-compose.yml` tal cual | `llama3.2:3b` | `false` | Sin medir |
+
+"Medido" significa corrido con `eval/ask.js 4` y las 45 preguntas. Mas memoria no
+garantiza mas calidad: en las pruebas `qwen2.5:7b` (42/45, 534 s) no supero a
+`gemma3:4b` (43/45) y fue un 60% mas lento. Mas VRAM compra velocidad y modelos
+mas grandes, y hay que medir cuanto mejora en cada caso.
+
+### Sin GPU (solo CPU)
+
+Es el `docker-compose.yml` tal cual y el `.env.example` por defecto: no hay que
+cambiar nada.
+
+- Si `docker compose up -d` falla con `range of CPUs is from 0.01 to N.00`, el equipo
+  tiene menos nucleos que el limite `cpus: "8"` del compose: bajar ese numero al
+  que diga el error. En Windows con WSL, los nucleos que ve Docker salen de
+  `processors` en `.wslconfig`.
+- Con `llama3.2:3b`, `ASK_REASONING` debe quedar en `false`: con razonamiento
+  empeoro (34/45 contra 42/45).
+
+### GPU NVIDIA (Windows con WSL2 o Linux)
+
+Requisitos: driver de NVIDIA actualizado. En Windows basta con Docker Desktop con
+WSL2; en Linux hace falta ademas el NVIDIA Container Toolkit.
+
+Crear `docker-compose.override.yml` en la raiz del repo (git lo ignora, es por
+equipo). Docker Compose lo fusiona solo con `docker-compose.yml`:
+
+```yaml
+services:
+  ollama:
+    deploy:
+      resources:
+        limits:
+          cpus: "6"    # igual o menor a los nucleos que ve Docker
+          memory: 6G   # subir si el modelo de chat es de 7B o mas
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
+Para comprobar que quedo bien:
+
+```
+docker compose config
+docker exec ollama nvidia-smi
+docker exec ollama ollama ps
+```
+
+La columna `PROCESSOR` de `ollama ps` dice que parte del modelo esta en GPU. Con
+4 GB de VRAM, `gemma3:4b` queda en ~54% GPU y `llama3.2:3b` en ~80%; el resto va
+a CPU.
+
+Detalle de VRAM: `bge-m3` y el modelo de chat no caben juntos en 4 GB y Ollama se
+los expulsaba entre si, recargando uno en cada pregunta (~6 s). Por eso `ollama.js`
+pide los embeddings en CPU (`num_gpu: 0`). Con mucha VRAM podrian ir en GPU, pero
+hoy no es configurable.
+
+En `api/.env` de un equipo con 4 GB:
+
+```
+CHAT_MODEL=gemma3:4b
+ASK_REASONING=true
+```
+
+### Mac con Apple Silicon
+
+Docker en Mac no puede usar la GPU del chip: un Ollama dentro de Docker correria
+solo en CPU. La opcion buena es **Ollama nativo** (app o `brew install ollama`) y
+en Docker solo la base de datos:
+
+```
+docker compose up -d db
+ollama pull bge-m3
+ollama pull gemma3:4b
+```
+
+La API ya apunta a `http://localhost:11434` (`OLLAMA_URL`), asi que no cambia nada.
+Las variables `OLLAMA_*` del compose (`KEEP_ALIVE`, `MAX_LOADED_MODELS`, etc.) no
+aplican al Ollama nativo: si hacen falta, se definen como variables de entorno del
+sistema. Este perfil no esta medido: es un punto de partida.
+
+### Otras cosas a tener en cuenta
+
+- La primera pregunta despues de 5 minutos sin uso paga la carga del modelo
+  (`OLLAMA_KEEP_ALIVE=5m`): unos 25 s con `gemma3:4b` en una GPU de 4 GB.
+- Al cambiar de equipo la base de datos arranca vacia: hay que volver a subir los
+  documentos (pantalla Documentos o `POST /documents`).
+- Cambiar de modelo o de `ASK_REASONING` cambia los resultados: medirlo con
+  `eval/ask.js` antes de compararlo con las referencias.
 
 ## Resultados de referencia
 

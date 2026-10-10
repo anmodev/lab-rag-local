@@ -7,7 +7,11 @@ import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { extractText } from "../extractors.js";
 import { embedTexts } from "../ollama.js";
-import { findDocumentByHash, saveDocument } from "../repository.js";
+import {
+  findDocumentByHash,
+  listDocuments,
+  saveDocument,
+} from "../repository.js";
 import path from "node:path";
 import { chunkText, chunkMarkdown } from "../chunker.js";
 
@@ -20,6 +24,12 @@ const upload = multer({
 });
 
 export const documentsRouter = Router();
+
+// Documentos cargados en la base de conocimiento (para la pantalla de carga).
+documentsRouter.get("/", async (req, res) => {
+  const documents = await listDocuments();
+  res.json({ documents });
+});
 
 documentsRouter.post("/", upload.single("file"), async (req, res) => {
   if (!req.file) {

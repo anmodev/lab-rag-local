@@ -1,2 +1,4 @@
 node_modules/
 .env
+api/eval/ask.log
+docker-compose.override.yml

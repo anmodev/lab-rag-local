@@ -6,7 +6,7 @@
 //
 // En questions.json, "answerHas" es el texto que debe aparecer en la respuesta del modelo.
 // Las preguntas sin "answerHas" no estan en los documentos: se espera "no tengo informacion".
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 const API = process.env.API_URL ?? "http://localhost:3000";
 const ANSWER_WIDTH = Number(process.env.ANSWER_WIDTH ?? 80); // ancho de la columna respuesta
@@ -82,6 +82,8 @@ function toRow(item, r) {
     ? [clean(item.answerHas)]
     : ["no tengo informacion", "no se menciona"];
   const s = r.stats; // no existe si /ask respondio sin llamar al modelo (umbral)
+  // r.answer ya es solo la respuesta final: la API separa el razonamiento en r.reasoning,
+  // asi que un dato citado en el razonamiento no cuenta como acierto.
   return {
     pregunta,
     respuesta: cut(r.answer.replace(/\s+/g, " "), ANSWER_WIDTH),
@@ -105,6 +107,23 @@ console.table(
     tiempo: fmt(ms),
     modelo: fmt(modelo_ms),
   })),
+);
+
+// Log con la respuesta completa (la tabla la corta): solo pregunta y respuesta, una por una.
+// Cada corrida sobreescribe el archivo, asi que lleva un encabezado para saber de cual es.
+const model = results.find((r) => r.model)?.model ?? "desconocido";
+const log = questions
+  .map((item, i) => {
+    const r = results[i];
+    if (r.error) return `#${i} P: ${item.q}\nR: ERROR: ${r.error}\n`;
+    const why = r.reasoning ? `Razonamiento: ${r.reasoning}\n` : "";
+    return `#${i} P: ${item.q}\n${why}R: ${r.answer}\n`;
+  })
+  .join("\n");
+await writeFile(
+  new URL("./ask.log", import.meta.url),
+  `Corrida: ${new Date().toLocaleString("es-CO")} | Modelo: ${model} | Concurrencia: ${concurrency}\n\n${log}`,
+  "utf-8",
 );
 
 const ok = rows.filter((r) => r.ok === "OK").length;

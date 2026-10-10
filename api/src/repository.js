@@ -16,6 +16,21 @@ export async function findDocumentByHash(hash) {
   return rows[0] ?? null;
 }
 
+// Lista los documentos cargados, del mas reciente al mas antiguo, con cuantos
+// chunks tiene cada uno. count() devuelve bigint, que pg entrega como texto,
+// por eso se castea a int.
+export async function listDocuments() {
+  const { rows } = await pool.query(
+    `SELECT d.id, d.filename, d.size_bytes, d.created_at,
+            count(c.id)::int AS chunk_count
+       FROM documents d
+       LEFT JOIN chunks c ON c.document_id = d.id
+      GROUP BY d.id
+      ORDER BY d.created_at DESC`,
+  );
+  return rows;
+}
+
 // Guarda el documento y todos sus chunks en una transaccion: si un INSERT
 // falla, no queda un documento a medias sin sus chunks.
 export function saveDocument({

@@ -15,6 +15,9 @@ export const config = {
   chatModel: process.env.CHAT_MODEL ?? "llama3.2:3b",
   // Similitud coseno minima para considerar relevante un chunk (lo usa /ask).
   minSimilarity: Number(process.env.MIN_SIMILARITY ?? 0.45),
+  // Estilo de respuesta de /ask. false: respuesta directa (el prompt medido con
+  // llama3.2:3b). true: el modelo escribe un razonamiento antes de responder.
+  askReasoning: (process.env.ASK_REASONING ?? "false").toLowerCase() === "true",
 };
 
 // Estas validaciones corren al importar el modulo, o sea al arrancar: es mejor

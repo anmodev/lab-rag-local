@@ -10,6 +10,7 @@
   --accent-contrast: #ffffff;
   --danger: #c0392b;
   --ok: #1f8a4c;
+  --warn: #b7791f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +24,7 @@
     --accent-contrast: #0c1222;
     --danger: #ff7b6b;
     --ok: #5fd08d;
+    --warn: #f0b429;
   }
 }
 

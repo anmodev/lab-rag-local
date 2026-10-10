@@ -124,7 +124,7 @@
     {
         "q": "¿Cuántas veces puedo dejar sin tomar mi descanso anual antes de que la empresa me lo imponga?",
         "expect": "acumular hasta 2 períodos",
-        "answerHas": "2 per",
+        "answerAny": ["2 per", "2 veces", "dos veces", "dos per"],
         "tipo": "parafrasis",
         "nueva": true
     },
@@ -152,7 +152,7 @@
     {
         "q": "kien autoriza las oras extras y con q formulario",
         "expect": "mediante el formulario HE-02",
-        "answerHas": "HE-02",
+        "answerHas": ["HE-02", "jefe directo"],
         "tipo": "ortografia",
         "nueva": true
     },
@@ -180,7 +180,7 @@
     {
         "q": "Necesito comprar algo de 12 millones: ¿quién lo aprueba y cuántas cotizaciones piden?",
         "expect": "las aprueba la gerencia financiera",
-        "answerHas": "gerencia financiera",
+        "answerHas": ["gerencia financiera", "tres"],
         "tipo": "combinar",
         "nueva": true
     },
@@ -207,8 +207,8 @@
     },
     {
         "q": "¿Qué dos formularios necesito para teletrabajar y para salir de vacaciones?",
-        "expect": "TH-12",
-        "answerHas": "TH-12",
+        "expect": ["TH-12", "TH-07"],
+        "answerHas": ["TH-12", "TH-07"],
         "tipo": "combinar",
         "nueva": true
     },
@@ -243,7 +243,7 @@
     {
         "q": "Llegué tarde 4 veces este mes, ¿qué me hacen?",
         "expect": "A partir del cuarto retraso",
-        "answerHas": "descuent",
+        "answerAny": ["descuent", "descont"],
         "tipo": "rangos",
         "nueva": true
     },

@@ -6,23 +6,87 @@
 <section
   class="dropzone"
   [class.dragging]="dragging()"
+  [class.busy]="busy()"
   (dragover)="onDragOver($event)"
   (dragleave)="dragging.set(false)"
   (drop)="onDrop($event)"
 >
-  <p>Arrastra aquí tus archivos <strong>.md</strong> o <strong>.txt</strong> (máximo 5 MB)</p>
+  <p>Arrastra aquí tus archivos <strong>.md</strong> o <strong>.txt</strong> (máximo 5 MB cada uno)</p>
   <label class="button">
     Elegir archivos
     <input type="file" accept=".md,.txt" multiple (change)="onFileInput($event)" />
   </label>
+  @if (busy()) {
+    <p class="hint">Puedes seguir agregando archivos; se procesan en orden.</p>
+  }
 </section>
 
+@if (busy()) {
+  <div class="progress" role="status">
+    <div class="progress-text">
+      <span>Procesando documento {{ batchDone() + 1 }} de {{ batchTotal() }}</span>
+      <span class="muted">{{ batchPercent() }} %</span>
+    </div>
+    <div
+      class="bar"
+      role="progressbar"
+      aria-label="Avance de la carga"
+      [attr.aria-valuenow]="batchPercent()"
+      aria-valuemin="0"
+      aria-valuemax="100"
+    >
+      <div class="bar-fill" [style.width.%]="batchPercent()"></div>
+      <div class="bar-active"></div>
+    </div>
+  </div>
+}
+
 @if (uploads().length) {
+  <div class="uploads-header">
+    <h2>Carga</h2>
+    @if (hasFinished()) {
+      <button type="button" class="link" (click)="clearFinished()">Limpiar lista</button>
+    }
+  </div>
   <ul class="uploads" aria-live="polite">
     @for (item of uploads(); track item.id) {
       <li [class]="'upload ' + item.status">
-        <span class="name">{{ item.name }}</span>
-        <span class="message">{{ item.message }}</span>
+        <span class="icon" aria-hidden="true">
+          @switch (item.status) {
+            @case ('uploading') {
+              <span class="spinner"></span>
+            }
+            @case ('queued') {
+              <span>⏳</span>
+            }
+            @case ('ok') {
+              <span>✓</span>
+            }
+            @case ('duplicate') {
+              <span>=</span>
+            }
+            @default {
+              <span>✕</span>
+            }
+          }
+        </span>
+        <div class="info">
+          <span class="name">{{ item.name }} <span class="muted">· {{ item.size }}</span></span>
+          <span class="message">
+            @if (item.status === 'uploading') {
+              {{ uploadingText(item) }}
+            } @else {
+              {{ item.message }}
+            }
+          </span>
+        </div>
+        <span class="time muted">
+          @if (item.status === 'uploading') {
+            {{ elapsed(item) }} s
+          } @else if (item.seconds) {
+            {{ item.seconds }} s
+          }
+        </span>
       </li>
     }
   </ul>

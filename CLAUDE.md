@@ -2,80 +2,73 @@
 
 Guia para Claude Code en este repositorio.
 
-Laboratorio de RAG 100% local (CPU, sin nube) para aprender el flujo completo: extraer texto, dividir en chunks, vectorizar, guardar en Postgres y responder con un modelo usando solo lo recuperado. Comentarios y docs en espanol simple, sin tildes. Excepcion: los textos que vera el usuario final de una aplicacion real llevan tildes. Los comandos del README estan escritos para cmd de Windows.
+Laboratorio de RAG 100% local (sin nube) para aprender el flujo completo: extraer texto, dividir en chunks, vectorizar, guardar en Postgres y responder con un modelo usando solo lo recuperado. Tiene una API (Node) y un front (Angular) con carga de documentos y chat con respuesta en streaming. Comentarios y docs en espanol simple, sin tildes. Excepcion: los textos que vera el usuario final de una aplicacion real (y los documentos de `data/docs/`) llevan tildes. Los comandos del README estan escritos para cmd de Windows.
 
 ## Comandos
 
 Infra (desde la raiz del repo): `docker compose up -d` levanta Ollama y Postgres+pgvector. Solo la primera vez, descargar los modelos:
 `docker exec ollama ollama pull bge-m3` y `docker exec ollama ollama pull llama3.2:3b`.
 
-API (desde `api/`, Node 24+, ESM): copiar `.env.example` a `.env`, luego `npm install` y `npm run dev` (`node --watch --env-file=.env src/server.js`). No hay build, lint ni pruebas unitarias (`npm test` es un stub). Al cambiar `.env` hay que reiniciar a mano: `--watch` solo vigila los `.js`.
+API (desde `api/`, Node 24+, ESM): copiar `.env.example` a `.env`, luego `npm install` y `npm run dev` (`node --watch --env-file=.env src/server.js`). `npm test` corre las pruebas del chunker (`node --test`, sin servidor). No hay build ni lint. Al cambiar `.env` hay que reiniciar a mano: `--watch` solo vigila los `.js`.
 
-La evaluacion es la suite de pruebas, y ambas necesitan el servidor andando:
-- `node eval/run.js`: solo recuperacion (`/search`). Muestra en que puesto sale el chunk esperado y el hueco de similitud con que se calibra `MIN_SIMILARITY`. Tarda segundos.
-- `node eval/ask.js [concurrencia]`: pipeline completo (`/ask`). Califica la respuesta del modelo y mide tiempos (en segundos desde 1 s, en ms por debajo). Tarda minutos (unos 5 con las 45 preguntas). Argumento: preguntas en simultaneo (1 por defecto). Variable opcional `ANSWER_WIDTH` para el ancho de la columna de respuesta.
-- Los casos estan en `api/eval/questions.json` (45: 20 originales + 25 nuevas): `q`, `expect` (texto que debe estar en el chunk correcto, lo usa `run.js`) y `answerHas` (texto que debe estar en la respuesta, lo usa `ask.js`; es una sola cadena). Sin ninguno de los dos, la pregunta no esta en los documentos y se espera que el modelo diga que no sabe. Las nuevas llevan `nueva: true` y `tipo` (`parafrasis`, `ortografia`, `combinar`, `rangos`, `trampa`); los scripts ignoran esos dos campos. Variable `API_URL`.
-- Para ver una respuesta completa (la tabla la corta) y los chunks que leyo el modelo: `curl.exe -X POST http://localhost:3000/ask -H "Content-Type: application/json" -d "{\"question\":\"...\"}"`. El campo `sources` es exactamente lo que llego al modelo.
+Front (desde `web/`): `npm install` y `npm start`; abre `http://localhost:4200` y reenvia `/api` a la API (`proxy.conf.json`).
+
+Evaluacion (necesita el servidor andando, desde `api/`):
+- `node eval/run.js [set.json]`: solo recuperacion (`/search`). Muestra en que puesto sale el chunk esperado y el hueco de similitud con que se calibra `MIN_SIMILARITY`. Tarda segundos.
+- `node eval/ask.js [concurrencia] [set.json] [--ids=1,2] [--k=3]`: pipeline completo (`/ask`). **No califica**: escribe `api/eval/ask.log` con cada pregunta, lo esperado y la respuesta, para que la revise una persona. Tarda minutos (45 preguntas: unos 3 con llama3.2:3b).
+- Sets: `questions.json` (45 preguntas, sobre los 3 documentos originales) y `questions-docs.json` (83, sobre los 12 documentos grandes). Campos: `q`, `expect` / `expectAny` (texto del chunk correcto, lo usa `run.js`; una lista exige todos, `expectAny` basta uno), `answerHas` / `answerAny` (lo esperado en la respuesta, solo informativo) y `tipo`. Sin ninguno de los dos, la pregunta no esta en los documentos y debe decir que no sabe. Variable `API_URL`.
+- Una respuesta completa y los chunks que leyo el modelo: `curl.exe -X POST http://localhost:3000/ask -H "Content-Type: application/json" -d "{\"question\":\"...\"}"`. El campo `sources` es exactamente lo que llego al modelo.
 
 ## Arquitectura
 
 API Express 5 (`api/src`) delante de dos servicios Docker. La API corre fuera de Docker y los alcanza por localhost.
 
-- Ingesta (`routes/documents.js`): subida -> `extractors.js` (por extension, solo .txt y .md; para un tipo nuevo se agrega una entrada al mapa) -> chunker -> embeddings por lotes en `ollama.js` -> `repository.saveDocument` (una transaccion). Los duplicados se detectan por SHA-256 (`content_hash`, responde 409).
-- Chunker (`chunker.js`): los `.md` usan `chunkMarkdown` (un chunk por seccion de titulos, con la ruta "Documento > Seccion" como primera linea; una seccion mas larga que `CHUNK_SIZE` se parte con `chunkText` y cada trozo conserva la ruta; los `#` dentro de bloques de codigo no cuentan como titulos). Los demas tipos usan `chunkText` (recursivo por parrafo, linea, oracion y palabra, con `CHUNK_SIZE` y `CHUNK_OVERLAP`).
-- Consulta (`routes/search.js`, `routes/ask.js`): vectoriza la pregunta -> `repository.searchChunks` (distancia coseno `<=>`, busqueda exacta, sin indice todavia) -> `/ask` filtra por `MIN_SIMILARITY`; si nada pasa, devuelve la respuesta fija "no tengo informacion" sin llamar al modelo de chat -> modelo de `CHAT_MODEL` (por defecto `llama3.2:3b`) con un system prompt que lo limita al contexto. El chat usa `temperature: 0` y `seed: 42` para que las respuestas sean reproducibles.
+- Ingesta (`routes/documents.js`): subida -> `extractors.js` (por extension, solo .txt y .md) -> chunker -> embeddings por lotes en `ollama.js` -> `repository.saveDocument` (una transaccion). Duplicados por SHA-256 (409). `GET /documents` lista lo cargado.
+- Chunker (`chunker.js`): los `.md` usan `chunkMarkdown`: un chunk por seccion de titulos con la ruta "Documento > Seccion" como primera linea. `CHUNK_SIZE` es un tamano OBJETIVO: una seccion que lo pasa hasta un 25 % se queda entera; una mas larga se reparte parejo en bloques (parrafos, listas, tablas, codigo) sin partirlos; dentro de un bloque se corta por oraciones (sin cortar en "a. m."), filas (repitiendo el encabezado) o lineas (conservando las cercas). Los demas tipos usan `chunkText`.
+- Consulta (`routes/search.js`, `routes/ask.js`): vectoriza la pregunta -> `repository.searchChunks` (coseno, exacta, sin indice) -> `/ask` toma `k=5` y filtra por `MIN_SIMILARITY`; si nada pasa, responde la frase fija "no tengo informacion" sin llamar al modelo -> `CHAT_MODEL` con un system prompt que lo limita al contexto. `temperature: 0` y `seed: 42`. Con `ASK_REASONING=true` el modelo razona en una linea antes de responder y `reply.js` separa razonamiento y respuesta. `POST /ask/stream` entrega la respuesta por partes (una linea JSON por evento).
+- Los embeddings se piden en CPU (`num_gpu: 0` en `ollama.js`): con 4 GB de VRAM el modelo de embeddings y el de chat se expulsaban entre si y cada pregunta pagaba una recarga.
 - `config.js` es el unico archivo que lee `process.env` y valida al importarse (exige `DATABASE_URL` y `CHUNK_OVERLAP < CHUNK_SIZE`).
 - `repository.js` concentra todo el SQL. Los vectores se envian como texto `'[..]'::vector`.
-- `server.js` tiene un manejador central de errores: `OllamaError` -> 502, `UnsupportedFileError` -> 415, limite de tamano de multer -> 413. Los handlers son async sin try/catch (Express 5 reenvia los rechazos).
-- Las `stats` de `/ask` vienen de Ollama en nanosegundos y se convierten a ms. Un `promptMs` casi en cero indica cache de un prompt identico al anterior.
+- `server.js` tiene un manejador central de errores: `OllamaError` -> 502, `UnsupportedFileError` -> 415, limite de multer -> 413. Los handlers son async sin try/catch (Express 5 reenvia los rechazos).
+- Las `stats` de `/ask` vienen de Ollama en nanosegundos y se convierten a ms.
 
 ## Trampas
 
 - La dimension de los embeddings (1024, bge-m3) esta en tres lugares: `vector(1024)` en `db/init.sql`, `EMBED_DIMENSIONS` en `config.js` y el propio modelo. Cambiar de modelo implica cambiar todo y re-vectorizar.
 - `db/init.sql` solo corre cuando se crea el volumen `pgdata` por primera vez. Los cambios de esquema se aplican a mano o con `docker compose down -v` (borra datos y modelos).
-- Cambiar los parametros de chunking o el codigo del chunker obliga a borrar los documentos antes de re-subirlos (`DELETE FROM documents;`, los chunks se borran en cascada), porque el dedupe es por hash del archivo.
-- `OLLAMA_CONTEXT_LENGTH=4096` en `docker-compose.yml`. `/ask` limita `k` a 10 y ese limite es prudencial: con chunks de ~1000 caracteres (~300 tokens), un `k` alto se acerca al tope. Se asume que Ollama recorta en silencio un prompt demasiado grande, pero no se ha verificado en este lab.
-- Memoria: PC de 16 GB con WSL limitado a 6 GB (`.wslconfig`). Con los dos modelos cargados el sistema llega al ~96% y se pone lento. Cerrar apps antes de correr evaluaciones largas.
-- `OLLAMA_KEEP_ALIVE=5m`: tras 5 minutos sin uso el modelo se descarga, y la primera pregunta paga la carga (~7 s). Al cambiar `CHAT_MODEL` o reiniciar los contenedores pasa lo mismo.
+- Cambiar los parametros de chunking o el codigo del chunker obliga a vaciar los documentos antes de re-subirlos (`TRUNCATE documents RESTART IDENTITY CASCADE;`), porque el dedupe es por hash del archivo.
+- `docker-compose.yml` limita Ollama a 8 CPUs: en un equipo con menos nucleos Docker no arranca el contenedor (`range of CPUs is from 0.01 to N`). Los ajustes de un equipo (GPU, CPUs, memoria) van en un `docker-compose.override.yml` local, que git ignora.
+- `OLLAMA_CONTEXT_LENGTH=4096`. `/ask` limita `k` a 10; con `k=5` y chunks de ~400 caracteres el prompt ronda los 700 a 1000 tokens.
+- Memoria: PC de 16 GB con WSL limitado (`.wslconfig`). Con los dos modelos cargados el sistema llega al ~90 % y se pone lento. Cerrar apps antes de evaluaciones largas.
+- `OLLAMA_KEEP_ALIVE=5m`: tras 5 minutos sin uso el modelo se descarga y la primera pregunta paga la carga (~7 s con llama3.2:3b, ~25 s con gemma3:4b).
 - No modificar `api/.env` (es la configuracion real); los cambios de plantilla van en `api/.env.example`.
 
 ## Evaluacion: reglas y hallazgos
 
-- Cambiar una sola variable por corrida (modelo, prompt, chunker, concurrencia) y comparar contra una referencia.
-- Referencia con `chunkMarkdown` y `llama3.2:3b`, solo las 20 originales: `run.js` deja las 14 preguntas con respuesta en el top-5 (13 en el puesto 1); `ask.js 4` da 19/20 en el script y tarda ~140 s. El fallo restante es maternidad: el modelo responde "no se menciona", que es correcto en el fondo.
-- Referencia con las 45 preguntas (mismo modelo, chunker y prompt): `run.js` deja las 34 con respuesta en el top-5 (30 en el puesto 1); `ask.js 4` da 42/45 en ~326 s. Las 20 originales dan 20/20; las 25 nuevas, 22/25 (parafrasis 5/5, ortografia 4/5, combinar 3/5, rangos 5/5, trampas 5/5).
-- Los 3 fallos nuevos (#25 comer en Cali, #30 aprobador de 12 millones, #31 vacaciones por 3 anos) son de lectura del modelo, no de recuperacion: el chunk correcto estaba en el prompt. Con `curl` #30 y #31 aciertan al cambiar la redaccion (la doble pregunta de #30 no era la causa), asi que el modelo de 3B es sensible a la redaccion y un fallo aislado no se debe leer como "no sabe el tema". #25 pide inferir que Cali es "ciudad principal" y el documento no lo dice.
-- Las trampas (cercanas al tema, sin dato) llegan a similitud ~0.67, por encima de casi todos los aciertos: el umbral no las filtra y llegan al modelo con 2 o 3 chunks. En esta corrida el modelo dijo que no sabia en las 5, pero es una muestra pequena.
-- Huecos del calificador: `answerHas` es una sola cadena, asi que en preguntas de dos partes solo se califica una; y una respuesta mezclada pasa si contiene "no se menciona" o "no tengo informacion" en cualquier lugar (maternidad figura OK aunque empieza citando la licencia de paternidad). `run.js` tambien comprueba un solo chunk en las preguntas que cruzan dos documentos.
-- La suma de `modelo_ms` (~334 s) volvio a superar el tiempo total (~326 s) con concurrencia 4: sigue sin explicarse. Los prompts de esta corrida llegaron a 825 tokens como maximo, asi que no aportan nada sobre el recorte silencioso del contexto.
-- Con `MIN_SIMILARITY=0.45`: los aciertos quedan desde ~0.49, las preguntas lejanas del tema hasta ~0.40, pero las preguntas cercanas al tema sin respuesta llegan a ~0.55-0.58 y se traslapan con los aciertos. Esas las resuelve el modelo, no el umbral.
-- Los modelos de 3B confunden rangos y temas parecidos. `qwen2.5:3b` no fue mejor (18/20) y un prompt que pedia "el dato exacto" empeoro el resultado (16/20). No retocar el prompt sin medir.
-- El chunker por secciones mejoro la velocidad (~190 s -> ~140 s con concurrencia 4, menos tokens por prompt) y arreglo el error del incidente critico.
-- Concurrencia: Ollama no escala en este equipo (unas 5 a 6 preguntas por minuto). Con 20 en simultaneo la espera maxima fue de ~217 s, cerca del limite de 300 s de `fetch`.
+- Cambiar una sola variable por corrida (modelo, prompt, chunker, `k`) y comparar contra una referencia.
+- **Hay ruido entre corridas**: aun con `temperature: 0` y `seed: 42`, con el modelo repartido entre GPU y CPU una misma pregunta con el mismo prompt cambia de respuesta. Diferencias de 1 a 3 preguntas en un set de 45 a 128 no son concluyentes; fiarse de patrones (por ejemplo "aparecieron falsos 'no se'") y no de un punto.
+- **Calificar leyendo el log, no con un texto fijo.** Un calificador automatico dio falsos positivos ("2 horas" dentro de "72 horas") y falsos negativos ("descontara" frente a "descuent"). Por eso `ask.js` ya no califica.
+- Resultados con `llama3.2:3b` directo, `k=5`, chunker v2 con 500/100 y los 15 documentos (juzgados a mano): set original 41/45, set nuevo 78/83. Con el chunker anterior (1000) y `k=3`, el original daba 38/45 (con 3 documentos daba 42/45: crecer el corpus cuesta recuperacion).
+- Que movio y que no, con ese mismo modelo: troceado v2 +1 a +3 (arreglo fragmentos cortados, tablas sin encabezado y codigo partido); `k=3` -> `k=5` +2 (rescata chunks que quedaban en el puesto 4 o 5) a costa de ~44 % mas de tiempo. Reglas nuevas en el prompt ("comprueba que el contexto trata de lo mismo", razonamiento en pasos con "coincide SI/NO") empeoraron: llama dio falsos "no se" (de 1 a 8) y gemma firmaba el "coincide" sin comprobarlo.
+- Comparacion de modelos (mismo set, `k=5`): `gemma3:4b` con razonamiento de una linea acierta lo mismo que `llama3.2:3b` directo (41/45) y tarda ~3 veces mas; `qwen2.5:7b` no mejoro y fue ~60 % mas lento. Fallan preguntas distintas, no menos.
+- Errores que persisten con modelos de 3B a 4B: inventar un dato a partir de una tabla de otro concepto (salario del gerente respondido con el cupo de tarjeta; bono de navidad con el bono por antiguedad), leer mal rangos y tablas de varias columnas, y preguntas de dos partes sobre temas distintos (llega un solo fragmento).
+- El umbral no separa trampas de aciertos: las preguntas cercanas al tema sin dato llegan a similitud ~0.70, por encima de casi todos los aciertos (~0.50 a 0.75). Esas las resuelve el modelo, no el umbral.
+- La referencia de la empresa (CPU) con la configuracion anterior era 42/45 en ~326 s; los tiempos del PC de la empresa no se volvieron a medir con la configuracion actual.
 
 ## Forma de trabajo
 
 - El usuario esta aprendiendo: explicar que hace cada comando antes de pedirle que lo corra. Un cambio a la vez.
-- Los comandos de operacion (docker compose, npm run dev, evaluaciones, curl) los corre el usuario en su cmd; no levantar servicios ni correr evaluaciones por su cuenta. Si algo queda corriendo, avisar y cerrarlo.
-- Pedir confirmacion antes de borrar datos (`DELETE FROM documents`, `docker compose down -v`).
+- Los comandos de operacion (docker compose, npm run dev, evaluaciones, curl) los corre el usuario en su cmd; no levantar servicios ni correr evaluaciones por su cuenta salvo que lo autorice expresamente. Si algo queda corriendo, avisar y cerrarlo.
+- Pedir confirmacion antes de borrar datos (`TRUNCATE documents`, `docker compose down -v`).
 - Piloto futuro en .NET, posiblemente con SQL Server 2012 (sin tipo vector): mantener el acceso a datos aislado en `repository.js`.
 
 ## Pendientes
 
-- Indice HNSW y comparar con `EXPLAIN` contra el escaneo exacto.
-- Set de evaluacion: ya hay 25 preguntas dificiles (ver arriba). Falta medir consistencia: varias redacciones de la misma pregunta y contar cuantas se responden bien siempre. Reformular #31 ("acumulado" choca con la seccion Acumulacion de la politica de vacaciones).
-- Calificador: que `answerHas` acepte una lista y exija todos los textos, y que `run.js` compruebe los dos chunks en preguntas que cruzan documentos. Cambia la comparacion con las referencias: medirlo aparte.
-- Respuestas en streaming y limite de concurrencia en la API.
-- Extractores para PDF, Word y PowerPoint (por ejemplo un servicio de conversion tipo MarkItDown o Docling).
-- Unir secciones muy cortas en el chunker de Markdown.
-- Corte relativo al primer resultado, para no mandar chunks de relleno al modelo.
+- Preguntas de dos partes sobre temas distintos: buscar cada parte por separado y juntar los resultados.
+- Frenar el "inventa a partir de un concepto parecido": probar un modelo mayor (con GPU) o una verificacion aparte antes de responder; las reglas de prompt no bastaron.
+- Indice HNSW y comparar con `EXPLAIN` contra el escaneo exacto (hoy no se nota con ~300 fragmentos).
+- Busqueda hibrida (texto + vectores) para codigos exactos como `PV-01`.
+- Autenticacion y limite de cola en la API antes de exponerla fuera de localhost.
+- Extractores para PDF, Word y PowerPoint (por ejemplo MarkItDown o Docling).
+- Borrar documentos desde el front.
 - Fijar la version de la imagen de Ollama y sacar las credenciales del compose a `.env`.
-
-## Para el piloto (modelo de chat mas grande)
-
-La recuperacion (bge-m3) y el umbral no dependen del modelo de chat; lo que se espera que mejore es la lectura del contexto (rangos, redaccion, "no se"). Protocolo para comparar:
-
-- Cambiar solo `CHAT_MODEL`, con el mismo set de 45, el mismo prompt y el mismo chunker, y comparar contra la referencia de 42/45. Con 3 fallos de base, una diferencia de 1 o 2 preguntas es ruido: apoyarse en el set de consistencia (varias redacciones).
-- Un modelo con razonamiento es otra variable: genera texto de pensamiento antes de responder (mas tokens y mas lento en CPU) y hay que ver como lo devuelve Ollama y que hace `routes/ask.js` con ese texto. Probarlo por separado del tamano.
-- Anotar el hardware del piloto junto a los resultados: los tiempos no son comparables con este equipo (16 GB, WSL a 6 GB, CPU). Un modelo de 7B a 8B cuantizado ocupa unos 5 GB y aqui quedaria justo con bge-m3 cargado.
-- Revisar el limite de 300 s de `fetch` en `eval/ask.js` y `OLLAMA_CONTEXT_LENGTH` si el modelo es mas lento o los prompts mas largos.

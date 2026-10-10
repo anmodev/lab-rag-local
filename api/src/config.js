@@ -4,8 +4,9 @@
 export const config = {
   port: Number(process.env.PORT ?? 3000),
   databaseUrl: process.env.DATABASE_URL,
-  chunkSize: Number(process.env.CHUNK_SIZE ?? 1000),
-  chunkOverlap: Number(process.env.CHUNK_OVERLAP ?? 200),
+  // Tamano OBJETIVO de cada chunk y cuanto se repite del anterior (ver chunker.js).
+  chunkSize: Number(process.env.CHUNK_SIZE ?? 500),
+  chunkOverlap: Number(process.env.CHUNK_OVERLAP ?? 100),
   ollamaUrl: process.env.OLLAMA_URL ?? "http://localhost:11434",
   embedModel: process.env.EMBED_MODEL ?? "bge-m3",
   // Debe coincidir con vector(1024) de db/init.sql. ollama.js lo usa para
@@ -15,8 +16,8 @@ export const config = {
   chatModel: process.env.CHAT_MODEL ?? "llama3.2:3b",
   // Similitud coseno minima para considerar relevante un chunk (lo usa /ask).
   minSimilarity: Number(process.env.MIN_SIMILARITY ?? 0.45),
-  // Estilo de respuesta de /ask. false: respuesta directa (el prompt medido con
-  // llama3.2:3b). true: el modelo escribe un razonamiento antes de responder.
+  // Estilo de respuesta de /ask. false: respuesta directa. true: el modelo escribe una
+  // linea de razonamiento antes de responder (ver routes/ask.js).
   askReasoning: (process.env.ASK_REASONING ?? "false").toLowerCase() === "true",
 };
 

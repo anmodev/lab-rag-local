@@ -14,16 +14,22 @@ export const askRouter = Router();
 // al modelo que lo use, asi la respuesta es la misma venga de donde venga.
 const NO_INFO = "No tengo informacion sobre eso en los documentos.";
 
-// Obliga al modelo a contestar solo con el contexto recuperado; sin esto
-// tiende a completar con lo que "sabe" y a inventar datos de la empresa.
-// Respuesta directa: el prompt con el que se midio llama3.2:3b (42/45).
+// Obliga al modelo a contestar solo con el contexto recuperado; sin esto tiende a
+// completar con lo que "sabe" y a inventar datos de la empresa.
+//
+// Respuesta directa (por defecto). Es corto a proposito: en las pruebas, agregar reglas
+// del tipo "comprueba que el contexto trata de lo mismo que la pregunta" NO evito las
+// respuestas inventadas con modelos de 3B a 4B y SI provoco falsos "no tengo informacion"
+// en preguntas que antes acertaban. Esos modelos no saben juzgar si un contexto parecido
+// aplica; eso pide un modelo mayor.
 const PROMPT_DIRECT = `Eres un asistente que responde preguntas sobre documentos internos de una empresa.
 Responde solo con la informacion del contexto. Si la respuesta no esta en el contexto, responde exactamente: "${NO_INFO}"
 Responde en espanol, de forma breve y directa.`;
 
-// Con razonamiento (ASK_REASONING=true): el modelo escribe "Razonamiento: ..."
-// y despues "Respuesta: ...". Arregla rangos y cuentas en gemma3:4b, pero con
-// llama3.2:3b empeora; por eso no es el modo por defecto.
+// Con razonamiento (ASK_REASONING=true): el modelo escribe "Razonamiento: ..." y despues
+// "Respuesta: ...". Ayuda con rangos y cuentas, pero cuesta mas tokens y con llama3.2:3b no
+// mejora. Un razonamiento mas largo en pasos ("que pide, que encontre, coincide") tampoco
+// mejoro a este de una linea: el modelo firma el "coincide" sin comprobarlo.
 const PROMPT_REASONING = `Eres un asistente que responde preguntas sobre documentos internos de una empresa.
 Responde solo con la informacion del contexto. Si la respuesta no esta en el contexto, responde exactamente: "${NO_INFO}"
 Antes de la respuesta final escribe una linea de razonamiento: si el contexto define rangos, indica a que rango pertenece el valor de la pregunta; si hay que sumar o multiplicar, muestra la cuenta.
@@ -35,9 +41,10 @@ const SYSTEM_PROMPT = config.askReasoning ? PROMPT_REASONING : PROMPT_DIRECT;
 
 // Devuelve los chunks relevantes para la pregunta (puede ser una lista vacia).
 async function retrieve(question, k) {
-  // k se acota entre 1 y 10: mas chunks llenan la ventana de contexto
-  // (OLLAMA_CONTEXT_LENGTH) y Ollama recortaria el prompt sin avisar.
-  const limit = Math.min(Math.max(Number(k) || 3, 1), 10);
+  // k = cuantos fragmentos recibe el modelo (5 por defecto). Se acota entre 1 y 10: mas
+  // chunks llenan la ventana de contexto (OLLAMA_CONTEXT_LENGTH) y Ollama recortaria el
+  // prompt sin avisar. Con chunks de ~400 caracteres, 5 fragmentos son ~700 tokens.
+  const limit = Math.min(Math.max(Number(k) || 5, 1), 10);
 
   // 1. Recuperar: los k chunks mas cercanos, sean buenos o no.
   const [vector] = await embedTexts([question]);

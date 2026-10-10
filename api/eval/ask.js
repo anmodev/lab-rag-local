@@ -1,30 +1,51 @@
-// Evalua el pipeline completo (/ask): respuesta del modelo, acierto y tiempos.
-// Uso, desde api/ y con el servidor andando:
-//   node eval/ask.js       una pregunta a la vez (por defecto)
-//   node eval/ask.js 4     hasta 4 preguntas en simultaneo
-//   node eval/ask.js 20    todas a la vez (equivale a un Promise.all de las 20)
+// Corre las preguntas contra /ask (pipeline completo: busqueda + modelo de chat) y guarda
+// en eval/ask.log cada pregunta con lo ESPERADO y lo RESPONDIDO, para revisarlo a mano.
+// No califica sola: un texto esperado fijo no entiende parafrasis ("descontara" no contiene
+// "descuenta"), y calificar es mas fiable leyendo la respuesta que buscando una cadena.
 //
-// En questions.json, "answerHas" es el texto que debe aparecer en la respuesta del modelo.
-// Las preguntas sin "answerHas" no estan en los documentos: se espera "no tengo informacion".
+// Uso, desde api/ y con el servidor andando:
+//   node eval/ask.js                          una pregunta a la vez (por defecto)
+//   node eval/ask.js 4                        hasta 4 preguntas en simultaneo
+//   node eval/ask.js 4 questions-docs.json    con otro set de preguntas
+//   node eval/ask.js 4 --ids=17,36,39         solo esas preguntas (numero de la tabla)
+//   node eval/ask.js 4 --k=3                  fija cuantos fragmentos recibe el modelo
+//
+// En el set, "answerHas" (texto o lista) y "answerAny" (alternativas) describen la respuesta
+// esperada; una pregunta sin ninguno no esta en los documentos y debe decir "no tengo
+// informacion". Solo se usan para mostrar lo esperado en el log.
 import { readFile, writeFile } from "node:fs/promises";
 
 const API = process.env.API_URL ?? "http://localhost:3000";
 const ANSWER_WIDTH = Number(process.env.ANSWER_WIDTH ?? 80); // ancho de la columna respuesta
-const concurrency = Math.max(1, Number(process.argv[2]) || 1);
+const args = process.argv.slice(2);
+const concurrency = Math.max(1, Number(args.find((a) => /^\d+$/.test(a))) || 1);
+const option = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+const k = option("k") ? Number(option("k")) : undefined;
+const only = option("ids") ? new Set(option("ids").split(",").map(Number)) : null;
 
-const questions = JSON.parse(
-  await readFile(new URL("./questions.json", import.meta.url), "utf-8"),
-);
+const setName = args.find((a) => a.endsWith(".json")) ?? process.env.QUESTIONS_FILE ?? "questions.json";
+const all = JSON.parse(await readFile(new URL(`./${setName}`, import.meta.url), "utf-8"));
+// Cada pregunta conserva su numero original, aunque se corra solo una parte.
+const selected = all.map((item, n) => ({ item, n })).filter(({ n }) => !only || only.has(n));
+if (!selected.length) {
+  console.error(`Ninguna pregunta coincide con --ids en ${setName}`);
+  process.exit(1);
+}
 
-// Minusculas y sin tildes: asi "Area" con tilde y "area" cuentan como iguales al comparar
-const clean = (s) =>
-  s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 3)}...` : s);
 // Segundos desde 1 s; por debajo, milisegundos
 const fmt = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
+
+// Que se espera de la respuesta, en palabras, para el log.
+function expected(item) {
+  const all = [].concat(item.answerHas ?? []);
+  const any = item.answerAny ?? [];
+  if (!all.length && !any.length) return "sin dato en los documentos: debe decir que no tiene informacion";
+  const parts = [];
+  if (all.length) parts.push(all.join(" y "));
+  if (any.length) parts.push(`alguno de: ${any.join(" | ")}`);
+  return parts.join(" y ");
+}
 
 // Llama a /ask y mide la latencia completa vista por el cliente (incluye la espera en cola).
 // Nunca lanza: si algo falla devuelve { error } para no tumbar a las demas preguntas.
@@ -35,7 +56,7 @@ async function ask(question) {
     const res = await fetch(`${API}/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(k ? { question, k } : { question }),
     });
     if (!res.ok) return { error: `HTTP ${res.status}`, ms: elapsed() };
     return { ...(await res.json()), ms: elapsed() };
@@ -45,9 +66,6 @@ async function ask(question) {
 }
 
 // Ejecuta fn sobre cada item con maximo `limit` en vuelo a la vez.
-// Son `limit` "trabajadores" que sacan preguntas de la misma lista hasta agotarla;
-// el Promise.all espera a que todos terminen. Con limit = cantidad de preguntas,
-// es el Promise.all clasico de lanzar todas juntas.
 async function runPool(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;
@@ -57,87 +75,54 @@ async function runPool(items, limit, fn) {
       results[i] = await fn(items[i]);
     }
   }
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, worker),
-  );
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
 }
 
-// Arma la fila de la tabla y decide si la respuesta es correcta
-// Arma la fila de la tabla y decide si la respuesta es correcta
-function toRow(item, r) {
-  const pregunta = cut(item.q, 42);
-  if (r.error) {
-    return {
-      pregunta,
-      respuesta: `ERROR: ${r.error}`,
-      ok: "ERROR",
-      ms: r.ms,
-      modelo_ms: 0,
-    };
-  }
-  // Textos aceptados como correctos. Con "answerHas" se espera ese dato; si no lo hay, la pregunta
-  // no esta en los documentos y se acepta cualquier forma de decir que no hay informacion.
-  const accepted = item.answerHas
-    ? [clean(item.answerHas)]
-    : ["no tengo informacion", "no se menciona"];
-  const s = r.stats; // no existe si /ask respondio sin llamar al modelo (umbral)
-  // r.answer ya es solo la respuesta final: la API separa el razonamiento en r.reasoning,
-  // asi que un dato citado en el razonamiento no cuenta como acierto.
-  return {
-    pregunta,
-    respuesta: cut(r.answer.replace(/\s+/g, " "), ANSWER_WIDTH),
-    ok: accepted.some((t) => clean(r.answer).includes(t)) ? "OK" : "FALLO",
-    chunks: r.sources.length, // chunks que pasaron el umbral
-    prompt_tok: s ? s.promptTokens : 0, // tokens que leyo el modelo
-    ms: r.ms, // latencia total, con espera en cola
-    modelo_ms: s ? s.loadMs + s.promptMs + s.genMs : 0, // trabajo real del modelo, sin cola
-  };
-}
-
 const wallStart = performance.now();
-const results = await runPool(questions, concurrency, (item) => ask(item.q));
+const results = await runPool(selected, concurrency, ({ item }) => ask(item.q));
 const wallMs = Math.round(performance.now() - wallStart);
 
-const rows = questions.map((item, i) => toRow(item, results[i]));
-// rows conserva los ms como numero para los calculos; solo la tabla usa texto
+// Tabla: la respuesta sale cortada; el log tiene el texto completo.
 console.table(
-  rows.map(({ ms, modelo_ms, ...rest }) => ({
-    ...rest,
-    tiempo: fmt(ms),
-    modelo: fmt(modelo_ms),
-  })),
+  selected.map(({ item, n }, i) => {
+    const r = results[i];
+    const s = r.stats; // no existe si /ask respondio sin llamar al modelo (umbral)
+    return {
+      n,
+      pregunta: cut(item.q, 42),
+      respuesta: cut((r.error ? `ERROR: ${r.error}` : r.answer).replace(/\s+/g, " "), ANSWER_WIDTH),
+      chunks: r.sources?.length ?? 0, // fragmentos que pasaron el umbral
+      prompt_tok: s ? s.promptTokens : 0, // tokens que leyo el modelo
+      tiempo: fmt(r.ms), // latencia total, con espera en cola
+      modelo: fmt(s ? s.loadMs + s.promptMs + s.genMs : 0), // trabajo real del modelo, sin cola
+    };
+  }),
 );
 
-// Log con la respuesta completa (la tabla la corta): solo pregunta y respuesta, una por una.
-// Cada corrida sobreescribe el archivo, asi que lleva un encabezado para saber de cual es.
+// Log para revisar a mano. Cada corrida lo sobreescribe: copiarlo si se quiere conservar.
 const model = results.find((r) => r.model)?.model ?? "desconocido";
-const log = questions
-  .map((item, i) => {
+const log = selected
+  .map(({ item, n }, i) => {
     const r = results[i];
-    if (r.error) return `#${i} P: ${item.q}\nR: ERROR: ${r.error}\n`;
     const why = r.reasoning ? `Razonamiento: ${r.reasoning}\n` : "";
-    return `#${i} P: ${item.q}\n${why}R: ${r.answer}\n`;
+    const ans = r.error ? `ERROR: ${r.error}` : r.answer;
+    return `#${n} P: ${item.q}\nEsperado: ${expected(item)}\n${why}R: ${ans}\n`;
   })
   .join("\n");
+const scope = only ? ` | Solo: #${[...only].join(",#")}` : "";
 await writeFile(
   new URL("./ask.log", import.meta.url),
-  `Corrida: ${new Date().toLocaleString("es-CO")} | Modelo: ${model} | Concurrencia: ${concurrency}\n\n${log}`,
+  `Corrida: ${new Date().toLocaleString("es-CO")} | Modelo: ${model} | Concurrencia: ${concurrency} | Preguntas: ${setName}${k ? ` | k: ${k}` : ""}${scope}\n\n${log}`,
   "utf-8",
 );
 
-const ok = rows.filter((r) => r.ok === "OK").length;
-const errors = rows.filter((r) => r.ok === "ERROR").length;
-const times = rows.map((r) => r.ms);
-const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
-const modelSum = rows.reduce((a, r) => a + r.modelo_ms, 0);
-
+const times = results.map((r) => r.ms);
+const modelSum = results.reduce((a, r) => a + (r.stats ? r.stats.loadMs + r.stats.promptMs + r.stats.genMs : 0), 0);
+const errors = results.filter((r) => r.error).length;
+console.log(`Preguntas: ${setName} (${selected.length}) | Modelo: ${model} | Concurrencia: ${concurrency} | Errores: ${errors}`);
+console.log(`Tiempo total: ${fmt(wallMs)} | Suma del trabajo del modelo: ${fmt(modelSum)}`);
 console.log(
-  `Concurrencia: ${concurrency} | Aciertos: ${ok}/${rows.length} | Errores: ${errors}`,
+  `Latencia por pregunta -> promedio: ${fmt(Math.round(times.reduce((a, b) => a + b, 0) / times.length))} | maxima: ${fmt(Math.max(...times))}`,
 );
-console.log(
-  `Tiempo total: ${fmt(wallMs)} | Suma del trabajo del modelo: ${fmt(modelSum)}`,
-);
-console.log(
-  `Latencia por pregunta -> promedio: ${fmt(avg)} | maxima: ${fmt(Math.max(...times))}`,
-);
+console.log("Respuestas completas y lo esperado: api/eval/ask.log");

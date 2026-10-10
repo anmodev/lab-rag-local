@@ -1,4 +1,6 @@
 node_modules/
 .env
+# Salida de api/eval/ask.js (se regenera en cada corrida)
 api/eval/ask.log
+# Ajustes locales de Docker de cada equipo (por ejemplo GPU); ver README
 docker-compose.override.yml

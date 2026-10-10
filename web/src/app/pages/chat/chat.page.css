@@ -1,0 +1,266 @@
+:host {
+  display: block;
+}
+
+/* Ocupa el alto visible: la barra superior (~57px) y el relleno de la pagina (48px). */
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 120px);
+  min-height: 360px;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 4px 16px;
+}
+
+.empty {
+  margin: auto;
+  max-width: 560px;
+  text-align: center;
+}
+
+.empty p {
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggestions button {
+  padding: 10px 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggestions button:hover {
+  border-color: var(--accent);
+}
+
+.row {
+  display: flex;
+}
+
+.row.user {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+}
+
+.user .bubble {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
+}
+
+.assistant .bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.bubble p {
+  margin: 0;
+}
+
+.answer p {
+  white-space: pre-wrap;
+}
+
+.answer p + p,
+.answer p + pre,
+.answer pre + p {
+  margin-top: 8px;
+}
+
+/* Codigo en linea y bloques de codigo. */
+code {
+  padding: 1px 5px;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  border-radius: 5px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  border-radius: 8px;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85rem;
+  white-space: pre;
+}
+
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.live-reasoning {
+  margin-top: 6px !important;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+details {
+  margin-top: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+summary {
+  cursor: pointer;
+}
+
+details p {
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+.sources {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.meta {
+  margin-top: 8px !important;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Indicador de "pensando": tres puntos que suben y bajan. */
+.dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: bounce 1s infinite ease-in-out;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Cursor parpadeante al final del texto mientras se escribe. */
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--text);
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots i,
+  .caret {
+    animation: none;
+  }
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+textarea {
+  flex: 1;
+  max-height: 160px;
+  padding: 10px 12px;
+  resize: none;
+  field-sizing: content;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.composer button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.composer .stop {
+  background: var(--danger);
+  color: #fff;
+}

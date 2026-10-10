@@ -1,0 +1,90 @@
+<div class="chat">
+  <div class="messages" #scroller aria-live="polite">
+    @if (!messages().length) {
+      <div class="empty">
+        <h1>Pregúntale a tus documentos</h1>
+        <p>Respondo solo con lo que hay en la base de conocimiento.</p>
+        <div class="suggestions">
+          @for (s of suggestions; track s) {
+            <button type="button" (click)="send(s)">{{ s }}</button>
+          }
+        </div>
+      </div>
+    }
+
+    @for (m of messages(); track m.id) {
+      @if (m.role === 'user') {
+        <div class="row user"><div class="bubble">{{ m.text }}</div></div>
+      } @else {
+        <div class="row assistant">
+          <div class="bubble" [class.error]="m.status === 'error'">
+            @if (m.status === 'thinking') {
+              <div class="thinking">
+                <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                Pensando…
+              </div>
+              @if (m.reasoning) {
+                <p class="live-reasoning">{{ m.reasoning }}</p>
+              }
+            }
+
+            @if (m.shown) {
+              <div class="answer">
+                @for (block of blocks(m); track $index) {
+                  @if (block.kind === 'code') {
+                    <pre><code>{{ block.text }}</code></pre>
+                  } @else {
+                    <p>@for (part of block.inlines; track $index) {@switch (part.kind) {@case ('code') {<code>{{ part.text }}</code>}@case ('bold') {<strong>{{ part.text }}</strong>}@default {<span>{{ part.text }}</span>}}}</p>
+                  }
+                }
+                @if (isTyping(m) || m.status === 'writing') {
+                  <span class="caret" aria-hidden="true"></span>
+                }
+              </div>
+            }
+
+            @if (m.status === 'done' && !isTyping(m)) {
+              @if (m.reasoning) {
+                <details>
+                  <summary>Ver razonamiento</summary>
+                  <p>{{ m.reasoning }}</p>
+                </details>
+              }
+              @if (m.sources.length) {
+                <details>
+                  <summary>Fuentes ({{ m.sources.length }})</summary>
+                  <ul class="sources">
+                    @for (s of m.sources; track $index) {
+                      <li>
+                        {{ s.filename }} <span class="muted">· fragmento {{ s.chunkIndex }} · similitud {{ s.similarity }}</span>
+                      </li>
+                    }
+                  </ul>
+                </details>
+              }
+              @if (m.meta) {
+                <p class="meta">{{ m.meta }}</p>
+              }
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+
+  <form class="composer" (submit)="$event.preventDefault(); send()">
+    <textarea
+      rows="1"
+      placeholder="Escribe tu pregunta…"
+      aria-label="Pregunta"
+      [value]="draft()"
+      (input)="onInput($event)"
+      (keydown.enter)="onEnter($event)"
+    ></textarea>
+    @if (busy()) {
+      <button type="button" class="stop" (click)="stop()">Detener</button>
+    } @else {
+      <button type="submit" [disabled]="!draft().trim()">Enviar</button>
+    }
+  </form>
+</div>

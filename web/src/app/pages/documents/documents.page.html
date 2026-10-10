@@ -1,0 +1,67 @@
+<h1>Documentos</h1>
+<p class="subtitle">
+  La base de conocimiento: el asistente solo responde con lo que hay en estos archivos.
+</p>
+
+<section
+  class="dropzone"
+  [class.dragging]="dragging()"
+  (dragover)="onDragOver($event)"
+  (dragleave)="dragging.set(false)"
+  (drop)="onDrop($event)"
+>
+  <p>Arrastra aquí tus archivos <strong>.md</strong> o <strong>.txt</strong> (máximo 5 MB)</p>
+  <label class="button">
+    Elegir archivos
+    <input type="file" accept=".md,.txt" multiple (change)="onFileInput($event)" />
+  </label>
+</section>
+
+@if (uploads().length) {
+  <ul class="uploads" aria-live="polite">
+    @for (item of uploads(); track item.id) {
+      <li [class]="'upload ' + item.status">
+        <span class="name">{{ item.name }}</span>
+        <span class="message">{{ item.message }}</span>
+      </li>
+    }
+  </ul>
+}
+
+<section class="list">
+  <div class="list-header">
+    <h2>Cargados</h2>
+    <button type="button" class="link" (click)="refresh()" [disabled]="loading()">
+      Actualizar
+    </button>
+  </div>
+
+  @if (loadError()) {
+    <p class="error" role="alert">{{ loadError() }}</p>
+  } @else if (loading() && !documents().length) {
+    <p class="muted">Cargando...</p>
+  } @else if (!documents().length) {
+    <p class="muted">Todavía no hay documentos. Sube el primero arriba.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Archivo</th>
+          <th class="num">Tamaño</th>
+          <th class="num">Fragmentos</th>
+          <th>Cargado</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (doc of documents(); track doc.id) {
+          <tr>
+            <td>{{ doc.filename }}</td>
+            <td class="num">{{ formatSize(doc.size_bytes) }}</td>
+            <td class="num">{{ doc.chunk_count }}</td>
+            <td>{{ doc.created_at | date: 'dd/MM/yyyy HH:mm' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

@@ -223,7 +223,44 @@ curl.exe -X POST http://localhost:3000/ask -H "Content-Type: application/json" -
 Salud de la API; subir un documento; buscar chunks parecidos (sin modelo de chat); preguntar
 (busca y responde). La respuesta de `/ask` trae `sources`: exactamente los fragmentos que leyo el modelo.
 
-## Evaluar
+## Guia rapida para una demo
+
+Ya con todo instalado (modelos descargados, `npm install` hecho). Necesitas dos cmd, uno para la API y otro para el front.
+
+**Antes** (unos 10 minutos antes, cierra apps pesadas: con los dos modelos cargados el PC llega al ~90 % de RAM):
+
+```
+docker compose up -d
+```
+
+cmd 1, desde `api/`: `npm run dev` (debe decir "API escuchando en http://localhost:3000").
+cmd 2, desde `web/`: `npm start` (abre `http://localhost:4200`).
+
+Revisar que hay documentos cargados (si no, subir los de `data/docs/` desde la pantalla Documentos):
+
+```
+docker exec rag_db psql -U rag_user -d rag_db -c "SELECT d.id, d.filename, count(c.id) AS chunks FROM documents d LEFT JOIN chunks c ON c.document_id = d.id GROUP BY d.id ORDER BY d.id;"
+```
+
+Calentar los modelos haciendo una pregunta en el Chat: tras 5 minutos sin uso Ollama los descarga y la primera
+pregunta tarda unos 7 s extra. Para ver que modelos estan en memoria: `docker exec ollama ollama ps`.
+
+**Preguntas para mostrar** (sobre `faq-recursos-humanos.md`; sin tildes, porque el cmd las deforma en `curl`):
+
+- Respuesta directa: "cada cuanto se paga la nomina", "cuanto cuesta el certificado laboral", "que hago si pierdo mi carne", "donde pido el teletrabajo".
+- Mas dificil: "hay algun bono por antiguedad", "los convenios incluyen a mi familia".
+- Fuera del documento (debe decir que no sabe): "cual es la capital de Francia" (sin relacion, responde la frase fija sin llamar al modelo). Las preguntas cercanas al tema sin dato, como "cuanto gana el gerente general", son las que mas fallan con 3B: probarlas antes.
+
+Mostrar el RAG sin el front: ver "Probar sin el front" (`/search` enseña que fragmentos se recuperan, `/ask` trae `sources`).
+Mostrar la base: ver "Ver la base de datos desde consola".
+
+**Despues**: `Ctrl+C` en cada cmd (API y front) y, desde la raiz:
+
+```
+docker compose down
+```
+
+Sin `-v`: conserva modelos y documentos. Con `-v` se borra todo (ver "Utiles").
 
 Se corre desde `api/` con el servidor andando. Hay dos sets de preguntas en `api/eval/`:
 
